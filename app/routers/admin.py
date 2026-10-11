@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.___.database import get_db #Thay doi sau
 from app.___.deps import require_admin #Yeu cau admin tu ben depend
 from app.routers import not_implemented # not_implemented duoc hieu là chuc nang chua lam, 
-from app.schema.admin import DashboardOut, SettingsOut, SettingsUpdate #day la schema fake sau nay sua lai sau
+from app.schemas.admin import DashboardOut, SettingsOut, SettingsUpdate #day la schema fake sau nay sua lai sau
 
 router = APIRouter(
     prefix="/api/admin",

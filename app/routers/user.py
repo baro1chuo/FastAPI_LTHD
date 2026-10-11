@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.___.database import get_db #Thay doi sau
 from app.___.deps import get_current_user, require_admin #lay nguoi dung hien tai ,yeu cau admin tu ben depend
 from app.routers import not_implemented # not_implemented duoc hieu là chuc nang chua lam, 
-from app.schema.user import UserAdminUpdate, UserOut, UserUpdateMe #day la schema fake sau nay sua lai sau
+from app.schemas.user import UserAdminUpdate, UserOut, UserUpdateMe #day la schema fake sau nay sua lai sau
 
 router = APIRouter(
     prefix="/api/users",
@@ -16,7 +16,7 @@ router = APIRouter(
 def update_me(
     data: UserUpdateMe,
     db: Session = Depends(get_db), 
-    current_user: Depends=(get_current_user)           
+    current_user: Depends = (get_current_user)           
 ):
     # TODO: doi thanh user_service.update_profile(db, current_user, data)
     not_implemented("user_service.update_profile")

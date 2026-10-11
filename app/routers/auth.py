@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 from app.___.database import get_db
 from app.___.deps import get_current_user
 from app.routers import not_implemented
-from app.schema.auth import LoginRequest, RegisterRequest, TokenResponse
-from app.schema.user import UserOut
+from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
+from app.schemas.user import UserOut
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
