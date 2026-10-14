@@ -29,7 +29,7 @@ class UserAdminResponse(UserBase):
 
 # Lớp dùng để trả về dữ liệu của user cho user, kế thừa UserBase
 class UserResponse(UserBase):
-    pass
+    id: int # id của người dùng
 
     model_config = ConfigDict(from_attributes=True)
 
