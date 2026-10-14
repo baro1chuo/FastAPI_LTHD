@@ -16,7 +16,8 @@ class AnimalBase(BaseModel):
     category_id: int
     conservation_status_code: str
     popularity: int = 0 # mặc định là 0 khi tạo mới bên csdl
-    featured: bool = False # Do trong csdl mặc định khi tạo mới là False nên để cho giống nhau
+    # trường này sẽ bị bỏ qua nếu request là của user
+    available: bool | None = None 
     image: str | None = None # Theo mặc định bên csdl giống bên trên
 
 # ----- INPUT -----
@@ -28,7 +29,7 @@ class AnimalCreate(AnimalBase):
     pass # cái này nghĩa là lớp con kế thừa hết, không thêm gì mới
 
 
-# Lớp dùng để cập nhật animal
+# Lớp dùng để cập nhật animal, Admin sẽ dùng lớp này
 # Tất cả các trường đều là tùy chọn nên không kế thừa AnimalBase. Dùng cho PATCH
 class AnimalUpdate(BaseModel):
     scientific_name: str | None = None
@@ -43,7 +44,7 @@ class AnimalUpdate(BaseModel):
 
 # Lớp dùng để trả về thông tin của animal cho FE
 class AnimalResponse(AnimalBase):
-    id: int # Thêm ID 
+    id: int # Thêm ID của animal
 
     model_config = ConfigDict(from_attributes=True)
 
