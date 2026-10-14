@@ -44,7 +44,7 @@ def get_user(
 
 
 
-@router.patch("/{user_id}", response_model=UserOut) #Cap nhat tai khoan 
+@router.patch("/update/{user_id}", response_model=UserOut) #Cap nhat tai khoan 
 def update_user(
     user_id: int,
     data: UserAdminUpdate,

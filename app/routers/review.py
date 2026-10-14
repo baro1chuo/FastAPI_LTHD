@@ -23,6 +23,7 @@ def list_public_reviews(
 ):
     not_implemented("review_service.list_approved")
 
+# khả năng sẽ có router để query review của một user cụ thể!
 
 
 # --- Nguoi dung da dang nhap  ---

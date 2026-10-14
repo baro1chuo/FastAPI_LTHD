@@ -1,30 +1,51 @@
+
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-class ReviewOut(BaseModel):
+# Các lớp sẽ không có kế thừa base do không cần thiết 
+# user_id sẽ được lấy ra từ một hàm dependency 
+
+# Lớp enum định nghĩa trạng thái của review
+class ReviewStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    HIDDEN = "hidden"
+
+
+# ----- INPUT -----
+
+# Dùng để người dùng thông thường cập nhật review của chính mình
+class ReviewUpdate(BaseModel):
+    rating: int | None = Field(default=None, ge=1, le=5) 
+    comment: str | None = Field(default=None, max_length=500)
+# Có thể cập nhật rating hoặc comment 
+# rating ở đây dùng default=None để nếu không chỉnh thì sẽ không đưa vào body 
+
+
+# Dùng lúc tạo review mới, không cần id, 
+class ReviewCreate(BaseModel):
+    rating: int = Field(ge=1, le=5) # phải có rating
+    comment: str | None = Field(default=None, max_length=500)
+    lang: str
+
+
+
+# ----- OUTPUT -----
+
+# Dùng để trả về review cho FE
+class ReviewResponse(BaseModel):
     id: int
     animal_id: int
     user_id: int
     rating: int
-    content: str
+    comment: str | None
     status: ReviewStatus
     created_at: datetime
-
-    model_config = {"from_attributes": True}
-
-class ReviewCreate(BaseModel):
-    animal_id: int
-    user_id: int
-    rating: int = Field(ge=1, le=5)
-    content: str = Field(max_length=500)
     lang: str
 
-class ReviewStatus(str, Enum):
-    pending = "pending"
-    approved = "approved"
-    hidden = "hidden"
+    model_config = ConfigDict(from_attributes=True)
 
-class ReviewStatusUpdate(BaseModel):
-    status: ReviewStatus
+
+

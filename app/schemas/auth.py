@@ -1,16 +1,30 @@
 from pydantic import BaseModel
 
-class RegisterRequest(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=8)
-    full_name: str = Field(min_length=1, max_length=100)
+# File này sẽ chứa các class dùng trong quá trình đăng nhập/xuất và xác thực người dùng
 
 
+# ----- INPUT -----
+
+# Người dùng gửi thông tin khi đăng nhập
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
 
+# Người dùng gửi token để xác thực bản thân
+class AuthenticationRequest(BaseModel):
+    token: str
+
+
+
+# ----- OUTPUT -----
+
+# Dùng để trả về JWT(JSON Web Token) sau khi đăng nhập thành công
 class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
+    token: str
+
+
+# Lớp gửi kết quả xác thực về cho người dùng
+class AuthenticationResponse(BaseModel):
+    validation: bool
+    description: str | None = None
