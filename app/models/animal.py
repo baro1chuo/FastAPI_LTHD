@@ -37,7 +37,7 @@ class Animal(Base):
         ForeignKey("conservation_status.code", ondelete="RESTRICT"),
         nullable=False,
     )
-    available: Mapped[bool] = mapped_column(
+    featured: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("0")
     )
     popularity: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))

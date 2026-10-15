@@ -22,6 +22,13 @@ def update_me(
     return user_service.update_profile(db, current_user, data)
 
 
+# -----CHI DE TEST (khong can dang nhap) – XOA TRUOC KHI NOP/TRIEN KHAI-----
+@router.get("/test/all", response_model=list[UserAdminResponse])
+def list_users_for_test(db: Session = Depends(get_db)):
+    """CHỈ ĐỂ TEST: xem mọi tài khoản mà không cần token admin (không trả mật khẩu/hash)."""
+    return user_service.list_users(db, size=1000)
+
+
 # -----DOI VOI ADMIN-----
 @router.get("", response_model=list[UserAdminResponse]) #Xem danh sach
 def list_users(

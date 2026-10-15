@@ -1,60 +1,30 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 # - File này sẽ chứa các schema dùng cho:
 # + animal: các thông tin cơ bản của các loài động vật
 
 # + animal_translation: các bản dịch về thông tin của các loài động vật
 
-# + AnimalWithTranslation: các thông tin cơ bản kèm bản dịch của động vật. 
+# + AnimalWithTranslation: các thông tin cơ bản kèm bản dịch của động vật.
 # Đây là lớp hỗn hợp(nested class). Lớp này mới là dữ liệu trả về cho FE
 
 # ===== ANIMAL =====
 
-# Lớp cơ sở 
+# Lớp cơ sở
 class AnimalBase(BaseModel):
-    scientific_name: str
+    scientific_name: str = Field(min_length=1, max_length=150)
     zone_id: int
     category_id: int
-    conservation_status_code: str
-    popularity: int = 0 # mặc định là 0 khi tạo mới bên csdl
-    # trường này sẽ bị bỏ qua nếu request là của user
-    available: bool | None = None 
-    image: str | None = None # Theo mặc định bên csdl giống bên trên
-
-# ----- INPUT -----
-# Lớp AnimalCreate và AnimalUpdate sẽ được sử dụng chung cho 2 trường hợp: gửi url và gửi file.
-# Tạm thời sẽ làm trường hợp gửi url trước
-
-# Lớp dùng để tạo animal mới
-class AnimalCreate(AnimalBase):
-    pass # cái này nghĩa là lớp con kế thừa hết, không thêm gì mới
-
-
-# Lớp dùng để cập nhật animal, Admin sẽ dùng lớp này
-# Tất cả các trường đều là tùy chọn nên không kế thừa AnimalBase. Dùng cho PATCH
-class AnimalUpdate(BaseModel):
-    scientific_name: str | None = None
-    zone_id: int | None = None
-    category_id: int | None = None
-    conservation_status_code: str | None = None
-    featured: bool | None = None
-    image: str | None = None
-
-
-# ----- OUTPUT -----
-
-# Lớp dùng để trả về thông tin của animal cho FE
-class AnimalResponse(AnimalBase):
-    id: int # Thêm ID của animal
-
-    model_config = ConfigDict(from_attributes=True)
-
+    conservation_status_code: str = Field(min_length=2, max_length=2) # EX, EW, CR, EN, VU, NT, LC, DD, NE
+    popularity: int = Field(0, ge=0) # mặc định là 0 khi tạo mới bên csdl
+    featured: bool = False # động vật nổi bật (hiện ở trang chủ)
+    image: str | None = None # đường dẫn ảnh
 
 
 # ===== ANIMAL_TRANSLATION =====
 
 # Lớp cơ sở
 class AnimalTranslationBase(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=100)
     appearance: str | None = None
     distribution: str | None = None
     ecology: str | None = None
@@ -72,39 +42,73 @@ class AnimalTranslationCreate(AnimalTranslationBase):
     lang: str # thêm trường lang để biết bản dịch là ngôn ngữ nào
 
 
-# Lớp dùng để cập nhật bản dịch animal
-class AnimalTranslationUpdate(BaseModel):
-    name: str | None = None
-    appearance: str | None = None
-    distribution: str | None = None
-    ecology: str | None = None
-    behaviour: str | None = None
-    diet: str | None = None
-    reproduction: str | None = None
-    lifespan: str | None = None
-    ecological_role: str | None = None
-    threat: str | None = None
-
-
-
 # ----- OUTPUT -----
 
 # Lớp trả về kết quả cho FE
 class AnimalTranslationResponse(AnimalTranslationBase):
-    animal_id: int
     lang: str
 
+    model_config = ConfigDict(from_attributes=True)
 
 
-# ===== ANIMAL WITH TRANSLATION =====
+# ===== INPUT CỦA ADMIN =====
+# Tạm thời ảnh gửi dạng url (chưa upload file)
 
-# Lớp này dùng để trả dữ liệu về cho FE
+# Lớp dùng để tạo animal mới: thông tin chung + ít nhất 1 bản dịch
+class AnimalCreate(AnimalBase):
+    translations: list[AnimalTranslationCreate] = Field(min_length=1)
+
+    # mỗi ngôn ngữ chỉ được có 1 bản dịch
+    @field_validator("translations")
+    @classmethod
+    def unique_lang(cls, value: list[AnimalTranslationCreate]):
+        langs = [tr.lang for tr in value]
+        if len(langs) != len(set(langs)):
+            raise ValueError("Mỗi ngôn ngữ chỉ được có 1 bản dịch")
+        return value
+
+
+# Lớp dùng cho PUT /api/animals/{id}: GHI ĐÈ toàn bộ nên cần đủ trường như lúc tạo
+# Bản dịch nào không gửi lên sẽ bị xóa
+class AnimalUpdate(AnimalCreate):
+    pass # cái này nghĩa là lớp con kế thừa hết, không thêm gì mới
+
+
+# ===== OUTPUT =====
+
+# Một dòng trong danh sách động vật (UC01, UC03)
+class AnimalListItem(BaseModel):
+    id: int
+    name: str # tên theo ngôn ngữ đang chọn, thiếu bản dịch thì dùng ngôn ngữ mặc định
+    scientific_name: str
+    image: str | None = None
+    zone_id: int
+    category_id: int
+    conservation_status_code: str
+    featured: bool
+    popularity: int
+
+
+# Danh sách có phân trang
+class AnimalPage(BaseModel):
+    items: list[AnimalListItem]
+    total: int # tổng số kết quả (để FE tính số trang)
+    page: int
+    size: int
+
+
+# Chi tiết động vật kèm bản dịch theo 1 ngôn ngữ (UC02)
 class AnimalWithTranslationResponse(
     AnimalBase,
     AnimalTranslationBase
 ):
     id: int # ID này là của bảng animal
-    lang: str
+    lang: str # ngôn ngữ thực tế của bản dịch trả về
 
-    model_config = ConfigDict(from_attributes=True) 
-    # cái này để pydantic đọc trực tiếp object từ SQLAlchemy
+
+# Trả cho admin sau khi tạo/sửa: thông tin chung + TẤT CẢ bản dịch
+class AnimalAdminResponse(AnimalBase):
+    id: int
+    translations: list[AnimalTranslationResponse]
+
+    model_config = ConfigDict(from_attributes=True)
