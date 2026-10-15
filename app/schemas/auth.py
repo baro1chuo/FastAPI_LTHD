@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 # File này sẽ chứa các class dùng trong quá trình đăng nhập/xuất và xác thực người dùng
 

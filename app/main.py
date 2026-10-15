@@ -1,9 +1,22 @@
-from fastapi import FastAPI
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
-from app.routers import admin, animals, auth, health, review, user, zone
+from app.core.database import init_db
+from app.core.exceptions import AppError
+from app.routers import auth, health, user
 
-app = FastAPI(title="Zoo API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Chạy một lần khi khởi động: tạo bảng và dữ liệu mặc định."""
+    init_db()
+    yield
+
+
+app = FastAPI(title="Zoo API", version="0.1.0", lifespan=lifespan)
 
 # TODO: đưa danh sách origin vào core/config.py (đọc từ .env)
 app.add_middleware(
@@ -14,5 +27,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for module in (health, auth, user, animals, zone, review, admin):
+
+@app.exception_handler(AppError)
+async def app_error_handler(request: Request, exc: AppError):
+    """Đổi exception nghiệp vụ từ service thành HTTP response {"detail": "..."}."""
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
+
+
+# TODO: thêm animals, zone, review, admin khi các router này hết import app.___ / not_implemented
+for module in (health, auth, user):
     app.include_router(module.router)

@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
@@ -39,3 +39,6 @@ class User(Base):
         "createdAt", DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP")
     )
     avatar: Mapped[str | None] = mapped_column(Text)
+
+    # Nạp kèm vai trò (JOIN) để đọc user.role.code khi tạo JWT / phân quyền
+    role: Mapped[Role] = relationship(lazy="joined")
