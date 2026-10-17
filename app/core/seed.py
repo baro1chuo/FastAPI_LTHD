@@ -9,6 +9,7 @@ from app.models.conservation_status import ConservationStatus, ConservationStatu
 from app.models.identity import Role, User
 from app.models.language import Language
 from app.models.settings import SystemSettings
+from app.models.zone import Zone, ZoneTranslation
 
 LANGUAGES = (("vi", "Tiếng Việt"), ("en", "English"))
 
@@ -39,7 +40,7 @@ CATEGORIES = (
 
 
 def seed(db: Session) -> None:
-    """Thêm ngôn ngữ, vai trò, mức bảo tồn, nhóm động vật, cài đặt và admin (nếu có biến môi trường)."""
+    """Thêm ngôn ngữ, vai trò, mức bảo tồn, nhóm động vật, cài đặt, khu mẫu và admin (nếu có biến môi trường)."""
     langs = set(db.scalars(select(Language.code)))
     db.add_all(Language(code=c, name=n) for c, n in LANGUAGES if c not in langs)
 
@@ -66,6 +67,12 @@ def seed(db: Session) -> None:
         db.add(SystemSettings(id=1, zoo_name="ZooGuide", open_hours="07h00-17h00",
                               auto_approve=False, default_lang="vi"))
 
+    # ponytail: 1 khu mẫu để thêm được động vật khi chưa có API khu vực; bỏ khi zone_service xong
+    if db.scalar(select(Zone.id).limit(1)) is None:
+        zone = Zone(color="#4CAF50", open_hours="07h00-17h00")
+        db.add(zone)
+        db.flush()
+        db.add(ZoneTranslation(zone_id=zone.id, lang="vi", name="Khu mẫu"))
     db.flush()
 
     if config.ADMIN_EMAIL and config.ADMIN_PASSWORD:
