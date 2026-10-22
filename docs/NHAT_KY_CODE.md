@@ -334,3 +334,35 @@ Ví dụ: `POST /api/auth/logout` với `Authorization: Bearer <token>` trả `2
 
 ### Điểm cần nhóm chốt
 - Giữ hay bỏ endpoint logout. Nó không thay đổi gì ở server.
+
+---
+
+## Bước 7 – Chạy lại toàn bộ + bộ test pytest (22/10/2026)
+
+### Việc đã làm
+| File | Thay đổi |
+|---|---|
+| `tests/conftest.py` | Mỗi test chạy trên CSDL tạm **riêng**: `alembic downgrade base` rồi `upgrade head` (tạo bảng đúng như migration), seed, nạp dữ liệu mẫu. Có sẵn fixture `admin`, `user`, `other_user` (header token) và `animal_ids`. Ảnh test ghi vào thư mục tạm. |
+| `tests/test_auth.py` | 8 test: đăng ký, hash mật khẩu, trùng email, đăng nhập sai (cùng thông báo), tài khoản khóa, token giả, đăng xuất. |
+| `tests/test_users.py` | 7 test: không sửa được email, đổi mật khẩu, avatar chỉ của mình, quyền admin, admin không tự khóa/xóa, bỏ đổi vai trò, xóa user xóa luôn đánh giá. |
+| `tests/test_animals.py` | 9 test: khách chỉ thấy động vật hiện, tìm/lọc, chi tiết theo ngôn ngữ + ẩn → 404, liên quan, thêm/trùng, ẩn/hiện, PATCH một phần, xóa kéo theo đánh giá, upload ảnh. |
+| `tests/test_reviews.py` | 9 test: UC04, UC09 (pending/409/tự duyệt/ẩn → 404/422), UC10, UC12 (sửa về pending, 403 với người khác, xóa rồi gửi lại), UC13. |
+| `tests/test_systems.py` | 5 test: thống kê, kiểm tra cài đặt, bật tự duyệt không đổi pending, khu vực/nhóm theo ngôn ngữ, health. |
+| `pytest.ini` | `pythonpath = .` để test import được `app`. |
+| `requirements.txt` | Thêm `pytest`, `httpx` (TestClient cần httpx). |
+
+### Giải thích
+- **TestClient** gửi request thẳng vào app FastAPI trong bộ nhớ, không cần mở port. Chạy nhanh, và đi qua đủ router → service → repository → SQLite như request thật.
+- **Mỗi test một CSDL sạch:** test A xóa động vật không làm test B sai. Test cũng dùng chính migration Alembic, nên nếu migration sai thì test hỏng ngay.
+- Mỗi test có docstring ghi **quy tắc / UC** đang kiểm tra, để đối chiếu với đặc tả.
+
+### Lệnh kiểm tra
+```bash
+python -m pytest -v
+```
+Kết quả: **38 passed** (khoảng 28 giây; phần lớn thời gian là băm mật khẩu PBKDF2 600.000 vòng).
+
+Chạy server thật: `python -m uvicorn app.main:app`. `/api/health` trả `{"status":"ok"}`, `/docs` trả 200, và `openapi.json` liệt kê đủ **33 endpoint** đúng đặc tả chốt.
+
+### Điểm cần nhóm chốt
+- `pytest` và `httpx` chỉ dùng để chạy test. Nếu nhóm muốn tách riêng thì chuyển sang file `requirements-dev.txt`.
