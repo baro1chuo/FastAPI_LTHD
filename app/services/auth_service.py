@@ -1,4 +1,7 @@
-"""UC07 Đăng nhập. UC04 Đăng xuất không cần service: JWT không lưu trên server, frontend tự xóa token."""
+"""Tầng service – UC07 Đăng nhập.
+
+UC05 Đăng xuất không cần service: JWT không lưu trên server nên frontend tự xóa token (router chỉ trả 204).
+"""
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AuthError, ForbiddenError
@@ -8,10 +11,10 @@ from app.schemas.auth import LoginRequest
 
 
 def login(db: Session, data: LoginRequest) -> str:
-    """Kiểm tra email + mật khẩu, trả access token (JWT) chứa id và vai trò.
+    """UC07 – kiểm tra email + mật khẩu, trả access token (JWT) chứa id và vai trò.
 
-    Sai email hoặc mật khẩu -> AuthError 401 (thông báo chung, không lộ email nào tồn tại).
-    Tài khoản bị khóa -> ForbiddenError 403.
+    Trả về: chuỗi JWT. Lỗi: AuthError (401) – sai email hoặc mật khẩu (thông báo CHUNG để không lộ
+    email nào đã đăng ký, UC07 E2); ForbiddenError (403) – tài khoản bị khóa (UC07 E3).
     """
     user = user_repository.get_by_email(db, data.email.lower())
     if user is None or not verify_password(data.password, user.password_hash):

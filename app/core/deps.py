@@ -40,6 +40,16 @@ def get_current_user(
     return _user_from_token(db, credentials.credentials)
 
 
+def require_token(credentials: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> int:
+    """Dependency chỉ kiểm tra JWT hợp lệ, KHÔNG tra CSDL (dùng cho đăng xuất). Trả về id người dùng trong token.
+
+    Lỗi: AuthError (401) nếu thiếu token, token sai chữ ký hoặc hết hạn.
+    """
+    if credentials is None:
+        raise AuthError("Chưa đăng nhập")
+    return decode_access_token(credentials.credentials)
+
+
 def get_optional_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: Session = Depends(get_db),

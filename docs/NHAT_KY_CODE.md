@@ -311,3 +311,26 @@ Mở `http://127.0.0.1:8000/static/uploads/avatars/3f2a9c...e1.png` là thấy �
 ### Điểm cần nhóm chốt
 - Ảnh cũ chưa bị xóa khi đổi ảnh mới (file cũ còn trên đĩa). Thêm bước dọn ảnh nếu cần.
 - Giới hạn 2 MB và 4 định dạng là mình tự đặt; nhóm có thể đổi qua `MAX_IMAGE_BYTES`.
+
+---
+
+## Bước 6 – Đăng xuất `POST /api/auth/logout` (22/10/2026)
+
+### Việc đã làm
+| File | Thay đổi |
+|---|---|
+| `app/routers/auth.py` | Thêm `POST /api/auth/logout`: chỉ trả **204**, không đụng CSDL. |
+| `app/core/deps.py` | Thêm `require_token`: chỉ kiểm tra JWT hợp lệ (401 nếu thiếu/sai), không tra bảng user. |
+| `app/services/auth_service.py` | Sửa docstring: đăng xuất là **UC05** (bản chốt), không phải UC04. |
+
+### Giải thích
+- JWT là **stateless**: server không lưu danh sách token, chỉ kiểm tra chữ ký và hạn dùng. Vì vậy "đăng xuất" thật sự là frontend xóa token. API này chỉ để frontend báo cho server và nhận 204.
+- **Hệ quả:** token đã cấp vẫn dùng được tới khi hết hạn (mặc định 24 giờ). Muốn thu hồi ngay thì phải lưu "danh sách token đã thu hồi" trong CSDL; đặc tả không yêu cầu nên chưa làm.
+
+Ví dụ: `POST /api/auth/logout` với `Authorization: Bearer <token>` trả `204 No Content`, body rỗng. Không gửi token trả `401 {"detail": "Chưa đăng nhập"}`.
+
+### Lệnh kiểm tra
+Đã kiểm tra: user và admin đều trả 204; không token hoặc token sai trả 401; sau khi logout, token cũ vẫn gọi được `/api/users/me` (đúng với JWT stateless).
+
+### Điểm cần nhóm chốt
+- Giữ hay bỏ endpoint logout. Nó không thay đổi gì ở server.
