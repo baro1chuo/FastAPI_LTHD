@@ -1,9 +1,10 @@
-"""Tầng repository – truy vấn bảng ANIMAL và ANIMAL_TRANSLATION.
+"""Tầng repository – truy vấn bảng ANIMAL và ANIMAL_TRANSLATION (async).
 
 Chỉ viết câu truy vấn; không kiểm tra quy tắc nghiệp vụ, không commit (service commit 1 lần cho cả giao dịch).
 """
 from sqlalchemy import Select, case, func, or_, select
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.models.animal import Animal, AnimalTranslation
 
@@ -36,7 +37,7 @@ def _pick(rows) -> list[tuple[Animal, AnimalTranslation | None]]:
     return [(animal, tr or tr_def or tr_any) for animal, tr, tr_def, tr_any in rows]
 
 
-def list_animals(db: Session, lang: str, default_lang: str, search: str | None = None,
+async def list_animals(db: AsyncSession, lang: str, default_lang: str, search: str | None = None,
                  category_id: int | None = None, zone_id: int | None = None,
                  sort: str = "name", include_hidden: bool = False,
                  offset: int = 0, limit: int = 20) -> tuple[list[tuple[Animal, AnimalTranslation | None]], int]:
@@ -59,16 +60,16 @@ def list_animals(db: Session, lang: str, default_lang: str, search: str | None =
         stmt = stmt.where(Animal.zone_id == zone_id)
 
     # Đếm tổng TRƯỚC khi cắt trang để FE tính được số trang
-    total = db.scalar(select(func.count()).select_from(stmt.subquery()))
+    total = await db.scalar(select(func.count()).select_from(stmt.subquery()))  # await: chờ SQLite đếm
     order = {
         "popular": (Animal.popularity.desc(), Animal.id),
         "newest": (Animal.id.desc(),),
     }.get(sort, (display_name, Animal.id))
-    rows = db.execute(stmt.order_by(*order).offset(offset).limit(limit)).all()
+    rows = (await db.execute(stmt.order_by(*order).offset(offset).limit(limit))).all()  # await: chờ trang kết quả
     return _pick(rows), total
 
 
-def list_related(db: Session, animal: Animal, lang: str, default_lang: str,
+async def list_related(db: AsyncSession, animal: Animal, lang: str, default_lang: str,
                  limit: int = 6) -> list[tuple[Animal, AnimalTranslation | None]]:
     """UC03 – động vật cùng nhóm HOẶC cùng khu vực, đang hiển thị, trừ chính nó.
 
@@ -84,63 +85,63 @@ def list_related(db: Session, animal: Animal, lang: str, default_lang: str,
         Animal.popularity.desc(),
         Animal.id,
     ).limit(limit)
-    return _pick(db.execute(stmt).all())
+    return _pick((await db.execute(stmt)).all())  # await: chờ SQLite trả kết quả
 
 
-def get_by_id(db: Session, animal_id: int) -> Animal | None:
+async def get_by_id(db: AsyncSession, animal_id: int) -> Animal | None:
     """Lấy động vật theo id (kể cả đang ẩn – service quyết định ai được xem); không có -> None."""
-    return db.get(Animal, animal_id)
+    return await db.get(Animal, animal_id)
 
 
-def get_translation(db: Session, animal_id: int, lang: str) -> AnimalTranslation | None:
+async def get_translation(db: AsyncSession, animal_id: int, lang: str) -> AnimalTranslation | None:
     """Bản dịch của một động vật theo ngôn ngữ (khóa chính animalId + lang); không có -> None."""
-    return db.get(AnimalTranslation, (animal_id, lang))
+    return await db.get(AnimalTranslation, (animal_id, lang))
 
 
-def list_translations(db: Session, animal_id: int) -> list[AnimalTranslation]:
+async def list_translations(db: AsyncSession, animal_id: int) -> list[AnimalTranslation]:
     """Mọi bản dịch của một động vật, sắp theo mã ngôn ngữ (admin dùng để xem/sửa)."""
-    return list(db.scalars(
+    return list(await db.scalars(
         select(AnimalTranslation).where(AnimalTranslation.animal_id == animal_id).order_by(AnimalTranslation.lang)
     ))
 
 
-def exists_scientific_name(db: Session, name: str, exclude_id: int | None = None) -> bool:
+async def exists_scientific_name(db: AsyncSession, name: str, exclude_id: int | None = None) -> bool:
     """Tên khoa học đã có ở động vật khác chưa (cột UNIQUE). exclude_id: bỏ qua chính nó khi sửa."""
     stmt = select(Animal.id).where(Animal.scientific_name == name)
     if exclude_id is not None:
         stmt = stmt.where(Animal.id != exclude_id)
-    return db.scalar(stmt.limit(1)) is not None
+    return await db.scalar(stmt.limit(1)) is not None
 
 
-def exists_name(db: Session, lang: str, name: str, exclude_id: int | None = None) -> bool:
+async def exists_name(db: AsyncSession, lang: str, name: str, exclude_id: int | None = None) -> bool:
     """Tên hiển thị đã có trong cùng ngôn ngữ chưa (UNIQUE(lang, name)). exclude_id: bỏ qua chính nó."""
     stmt = select(AnimalTranslation.animal_id).where(AnimalTranslation.lang == lang, AnimalTranslation.name == name)
     if exclude_id is not None:
         stmt = stmt.where(AnimalTranslation.animal_id != exclude_id)
-    return db.scalar(stmt.limit(1)) is not None
+    return await db.scalar(stmt.limit(1)) is not None
 
 
-def add(db: Session, animal: Animal, translations: list[AnimalTranslation]) -> Animal:
+async def add(db: AsyncSession, animal: Animal, translations: list[AnimalTranslation]) -> Animal:
     """Thêm động vật kèm bản dịch. Trả về animal đã có id."""
     db.add(animal)
-    db.flush()  # flush (chưa commit) để CSDL cấp animal.id, cần cho khóa ngoại của bản dịch
+    await db.flush()  # flush (chưa commit) để CSDL cấp animal.id, cần cho khóa ngoại của bản dịch
     for tr in translations:
         tr.animal_id = animal.id
     db.add_all(translations)
-    db.flush()
+    await db.flush()
     return animal
 
 
-def upsert_translations(db: Session, animal_id: int, translations: list[AnimalTranslation]) -> None:
+async def upsert_translations(db: AsyncSession, animal_id: int, translations: list[AnimalTranslation]) -> None:
     """Thêm hoặc thay thế bản dịch theo từng ngôn ngữ (PATCH); ngôn ngữ không gửi lên giữ nguyên."""
     for tr in translations:
         tr.animal_id = animal_id
         # merge: đã có bản dịch (animalId, lang) thì chép đè giá trị mới, chưa có thì thêm mới
-        db.merge(tr)
-    db.flush()
+        await db.merge(tr)  # await: merge phải đọc bản dịch cũ từ SQLite
+    await db.flush()
 
 
-def delete(db: Session, animal: Animal) -> None:
+async def delete(db: AsyncSession, animal: Animal) -> None:
     """Xóa vĩnh viễn động vật; bản dịch và đánh giá tự xóa theo ON DELETE CASCADE trong CSDL."""
-    db.delete(animal)
-    db.flush()
+    await db.delete(animal)
+    await db.flush()

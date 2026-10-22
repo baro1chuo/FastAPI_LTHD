@@ -19,7 +19,7 @@ _ALLOWED = {
 }
 
 
-def save_image(upload: UploadFile, folder: str) -> str:
+async def save_image(upload: UploadFile, folder: str) -> str:
     """Kiểm tra rồi lưu ảnh vào app/static/uploads/<folder>/.
 
     Tham số: upload – file client gửi; folder – thư mục con ('avatars' hoặc 'animals').
@@ -29,8 +29,9 @@ def save_image(upload: UploadFile, folder: str) -> str:
     if upload.content_type not in _ALLOWED:
         raise BusinessRuleError("Chỉ nhận ảnh JPEG, PNG, WEBP hoặc GIF")
     ext, signatures = _ALLOWED[upload.content_type]
-    # Đọc tối đa MAX+1 byte: đủ để biết file có vượt giới hạn không mà không đọc hết file quá lớn vào RAM
-    data = upload.file.read(config.MAX_IMAGE_BYTES + 1)
+    # await: chờ đọc dữ liệu file từ request. Đọc tối đa MAX+1 byte: đủ biết file có vượt giới hạn không
+    # mà không đọc hết file quá lớn vào RAM
+    data = await upload.read(config.MAX_IMAGE_BYTES + 1)
     if len(data) > config.MAX_IMAGE_BYTES:
         raise BusinessRuleError(f"Ảnh vượt quá {config.MAX_IMAGE_BYTES // (1024 * 1024)} MB")
     # content_type do client tự khai nên có thể giả; kiểm tra thêm chữ ký ở đầu file thật

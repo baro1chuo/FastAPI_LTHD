@@ -9,7 +9,7 @@ from pathlib import Path
 
 # Đặt DATABASE_URL TRƯỚC khi import app: app/core/config.py đọc biến môi trường lúc được import
 _TMP_DIR = Path(tempfile.mkdtemp(prefix="zooguide_test_"))
-os.environ["DATABASE_URL"] = f"sqlite:///{(_TMP_DIR / 'test.db').as_posix()}"
+os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{(_TMP_DIR / 'test.db').as_posix()}"
 
 import pytest  # noqa: E402
 from alembic import command  # noqa: E402
@@ -17,7 +17,7 @@ from alembic.config import Config  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.core import config  # noqa: E402
-from app.core.database import SessionLocal, engine  # noqa: E402
+from app.core.database import SessionLocal  # noqa: E402
 from app.core.sample_data import load_sample_data  # noqa: E402
 from app.main import app  # noqa: E402
 
@@ -31,12 +31,17 @@ def client(tmp_path, monkeypatch):
     alembic_cfg = Config(str(ROOT / "alembic.ini"))
     command.downgrade(alembic_cfg, "base")  # xóa mọi bảng của test trước
     command.upgrade(alembic_cfg, "head")    # tạo lại bảng đúng như migration
-    engine.dispose()  # bỏ kết nối cũ trỏ tới bảng vừa bị xóa
     monkeypatch.setattr(config, "UPLOAD_DIR", tmp_path / "uploads")  # không ghi ảnh test vào thư mục dự án
+
+    async def _load():
+        async with SessionLocal() as db:
+            await load_sample_data(db)
+
     with TestClient(app) as c:  # "with" để chạy lifespan -> init_db() -> seed dữ liệu mặc định
-        with SessionLocal() as db:
-            load_sample_data(db)
+        # Chạy hàm async trong CÙNG event loop với app (c.portal): kết nối aiosqlite gắn với 1 event loop
+        c.portal.call(_load)
         yield c
+        # lifespan tự engine.dispose() khi thoát "with": test sau mở kết nối mới trên event loop mới
 
 
 def login(client: TestClient, email: str, password: str = PASSWORD) -> dict:

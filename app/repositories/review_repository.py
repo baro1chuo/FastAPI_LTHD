@@ -1,9 +1,10 @@
-"""Tầng repository – truy vấn bảng REVIEW (nối USER để lấy tên người viết, ANIMAL_TRANSLATION để lấy tên động vật).
+"""Tầng repository – truy vấn bảng REVIEW, async (nối USER để lấy tên người viết, ANIMAL_TRANSLATION để lấy tên động vật).
 
 Chỉ viết câu truy vấn; không kiểm tra quy tắc nghiệp vụ, không commit.
 """
 from sqlalchemy import Select, func, select
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.models.animal import Animal, AnimalTranslation
 from app.models.review import Review
@@ -13,14 +14,14 @@ from app.models.user import User
 ReviewRow = tuple[Review, str, str]
 
 
-def get_by_id(db: Session, review_id: int) -> Review | None:
+async def get_by_id(db: AsyncSession, review_id: int) -> Review | None:
     """Lấy đánh giá theo id; không có -> None."""
-    return db.get(Review, review_id)
+    return await db.get(Review, review_id)
 
 
-def get_by_user_and_animal(db: Session, user_id: int, animal_id: int) -> Review | None:
+async def get_by_user_and_animal(db: AsyncSession, user_id: int, animal_id: int) -> Review | None:
     """Đánh giá của user cho động vật này (UNIQUE(animalId, userId)); chưa có -> None."""
-    return db.scalar(select(Review).where(Review.user_id == user_id, Review.animal_id == animal_id))
+    return await db.scalar(select(Review).where(Review.user_id == user_id, Review.animal_id == animal_id))
 
 
 def _apply_filters(stmt: Select, animal_id: int | None, user_id: int | None, statuses: list[str] | None,
@@ -55,7 +56,7 @@ def _select_with_names(lang: str, default_lang: str) -> Select:
     )
 
 
-def list_reviews(db: Session, lang: str, default_lang: str, animal_id: int | None = None,
+async def list_reviews(db: AsyncSession, lang: str, default_lang: str, animal_id: int | None = None,
                  user_id: int | None = None, statuses: list[str] | None = None,
                  user_name: str | None = None, visible_only: bool = False,
                  offset: int = 0, limit: int = 20) -> list[ReviewRow]:
@@ -67,16 +68,16 @@ def list_reviews(db: Session, lang: str, default_lang: str, animal_id: int | Non
     stmt = _apply_filters(_select_with_names(lang, default_lang),
                           animal_id, user_id, statuses, user_name, visible_only)
     stmt = stmt.order_by(Review.created_at.desc(), Review.id.desc()).offset(offset).limit(limit)
-    return [tuple(row) for row in db.execute(stmt).all()]
+    return [tuple(row) for row in (await db.execute(stmt)).all()]  # await: chờ SQLite trả trang kết quả
 
 
-def get_with_names(db: Session, review_id: int, lang: str, default_lang: str) -> ReviewRow | None:
+async def get_with_names(db: AsyncSession, review_id: int, lang: str, default_lang: str) -> ReviewRow | None:
     """Một đánh giá kèm tên người viết + tên động vật (trả về sau khi tạo/sửa); không có -> None."""
-    row = db.execute(_select_with_names(lang, default_lang).where(Review.id == review_id)).first()
+    row = (await db.execute(_select_with_names(lang, default_lang).where(Review.id == review_id))).first()
     return tuple(row) if row else None
 
 
-def summary(db: Session, animal_id: int | None = None, user_id: int | None = None,
+async def summary(db: AsyncSession, animal_id: int | None = None, user_id: int | None = None,
             statuses: list[str] | None = None, user_name: str | None = None,
             visible_only: bool = False) -> tuple[float | None, int]:
     """Điểm trung bình và tổng số đánh giá khớp CÙNG bộ lọc với list_reviews (không phân trang).
@@ -87,18 +88,18 @@ def summary(db: Session, animal_id: int | None = None, user_id: int | None = Non
             .join(User, User.id == Review.user_id)
             .join(Animal, Animal.id == Review.animal_id))
     sub = _apply_filters(stmt, animal_id, user_id, statuses, user_name, visible_only).subquery()
-    avg, count = db.execute(select(func.avg(sub.c.rating), func.count())).one()
+    avg, count = (await db.execute(select(func.avg(sub.c.rating), func.count()))).one()  # await: chờ SQLite tính
     return avg, count
 
 
-def add(db: Session, review: Review) -> Review:
+async def add(db: AsyncSession, review: Review) -> Review:
     """Thêm đánh giá; flush để CSDL cấp review.id (chưa commit)."""
     db.add(review)
-    db.flush()
+    await db.flush()
     return review
 
 
-def delete(db: Session, review: Review) -> None:
+async def delete(db: AsyncSession, review: Review) -> None:
     """Xóa vĩnh viễn một đánh giá."""
-    db.delete(review)
-    db.flush()
+    await db.delete(review)
+    await db.flush()

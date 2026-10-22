@@ -1,31 +1,31 @@
-"""Tầng repository – truy vấn bảng USER và ROLE.
+"""Tầng repository – truy vấn bảng USER và ROLE (async).
 
 Chỉ viết câu truy vấn; không kiểm tra quy tắc nghiệp vụ, không commit (service commit).
 """
 from sqlalchemy import or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.role import Role
 from app.models.user import User
 
 
-def get_by_id(db: Session, user_id: int) -> User | None:
+async def get_by_id(db: AsyncSession, user_id: int) -> User | None:
     """Lấy user theo id (kèm role nhờ lazy="joined"); không có -> None."""
-    return db.get(User, user_id)
+    return await db.get(User, user_id)  # await: chờ SQLite trả dòng user
 
 
-def get_by_email(db: Session, email: str) -> User | None:
+async def get_by_email(db: AsyncSession, email: str) -> User | None:
     """Tìm user theo email (cột UNIQUE); email truyền vào đã chuẩn hóa chữ thường."""
-    return db.scalar(select(User).where(User.email == email))
+    return await db.scalar(select(User).where(User.email == email))
 
 
-def get_role_by_code(db: Session, code: str) -> Role | None:
+async def get_role_by_code(db: AsyncSession, code: str) -> Role | None:
     """Lấy vai trò theo code: 'admin' | 'staff' | 'user'; không có -> None."""
-    return db.scalar(select(Role).where(Role.code == code))
+    return await db.scalar(select(Role).where(Role.code == code))
 
 
-def list_users(db: Session, search: str | None = None, status: str | None = None,
-               offset: int = 0, limit: int = 20) -> list[User]:
+async def list_users(db: AsyncSession, search: str | None = None, status: str | None = None,
+                     offset: int = 0, limit: int = 20) -> list[User]:
     """UC14 – danh sách user, mới tạo trước.
 
     Tham số: search – tìm gần đúng theo họ tên hoặc email; status – 'active' | 'locked';
@@ -37,17 +37,18 @@ def list_users(db: Session, search: str | None = None, status: str | None = None
         stmt = stmt.where(or_(User.full_name.ilike(pattern), User.email.ilike(pattern)))
     if status:
         stmt = stmt.where(User.status == status)
-    return list(db.scalars(stmt.order_by(User.created_at.desc(), User.id.desc()).offset(offset).limit(limit)))
+    stmt = stmt.order_by(User.created_at.desc(), User.id.desc()).offset(offset).limit(limit)
+    return list(await db.scalars(stmt))  # await: chờ SQLite trả danh sách
 
 
-def add(db: Session, user: User) -> User:
+async def add(db: AsyncSession, user: User) -> User:
     """Thêm user mới; flush để CSDL cấp user.id (chưa commit)."""
-    db.add(user)
-    db.flush()
+    db.add(user)  # add chỉ đưa object vào session (chưa có I/O) nên không cần await
+    await db.flush()  # await: chờ SQLite chạy INSERT và trả id
     return user
 
 
-def delete(db: Session, user: User) -> None:
+async def delete(db: AsyncSession, user: User) -> None:
     """Xóa user; các REVIEW của user tự xóa theo ON DELETE CASCADE."""
-    db.delete(user)
-    db.flush()
+    await db.delete(user)
+    await db.flush()

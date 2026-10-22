@@ -1,7 +1,7 @@
 """Tầng core – dependency xác thực (đọc JWT) và phân quyền (Guest / User / Admin) cho router."""
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.exceptions import AuthError, ForbiddenError
@@ -13,13 +13,14 @@ from app.repositories import user_repository
 _bearer = HTTPBearer(auto_error=False)
 
 
-def _user_from_token(db: Session, token: str) -> User:
+async def _user_from_token(db: AsyncSession, token: str) -> User:
     """Giải mã JWT rồi lấy user trong CSDL.
 
     Lỗi: AuthError (401) – token sai/hết hạn hoặc user đã bị xóa;
     ForbiddenError (403) – tài khoản bị khóa (chặn ngay cả khi token cũ chưa hết hạn).
     """
-    user = user_repository.get_by_id(db, decode_access_token(token))
+    # Giải mã JWT là phép tính nhanh (HMAC) nên gọi thẳng; chỉ việc tra CSDL mới cần await
+    user = await user_repository.get_by_id(db, decode_access_token(token))  # await: chờ SQLite trả user
     if user is None:
         raise AuthError("Tài khoản không tồn tại")
     if user.status == "locked":
@@ -27,9 +28,9 @@ def _user_from_token(db: Session, token: str) -> User:
     return user
 
 
-def get_current_user(
+async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> User:
     """Dependency cho API cần đăng nhập (User, Admin): trả user đang đăng nhập.
 
@@ -37,12 +38,13 @@ def get_current_user(
     """
     if credentials is None:
         raise AuthError("Chưa đăng nhập")
-    return _user_from_token(db, credentials.credentials)
+    return await _user_from_token(db, credentials.credentials)
 
 
 def require_token(credentials: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> int:
     """Dependency chỉ kiểm tra JWT hợp lệ, KHÔNG tra CSDL (dùng cho đăng xuất). Trả về id người dùng trong token.
 
+    Giữ def thường: không có I/O để chờ nên không cần async.
     Lỗi: AuthError (401) nếu thiếu token, token sai chữ ký hoặc hết hạn.
     """
     if credentials is None:
@@ -50,9 +52,9 @@ def require_token(credentials: HTTPAuthorizationCredentials | None = Depends(_be
     return decode_access_token(credentials.credentials)
 
 
-def get_optional_user(
+async def get_optional_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> User | None:
     """Dependency cho API công khai mà admin được xem thêm (vd danh sách động vật gồm cả động vật ẩn).
 
@@ -60,16 +62,18 @@ def get_optional_user(
     """
     if credentials is None:
         return None
-    return _user_from_token(db, credentials.credentials)
+    return await _user_from_token(db, credentials.credentials)
 
 
 def is_admin(user: User | None) -> bool:
-    """True nếu user là admin; Guest (None) và User thường -> False."""
+    """True nếu user là admin; Guest (None) và User thường -> False.
+    user.role đã được nạp sẵn (lazy="joined") nên đọc không cần truy vấn thêm."""
     return user is not None and user.role.code == "admin"
 
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
-    """Dependency cho API chỉ Admin dùng; vai trò khác -> ForbiddenError (403)."""
+    """Dependency cho API chỉ Admin dùng; vai trò khác -> ForbiddenError (403).
+    Giữ def thường: chỉ so sánh vai trò, không có I/O."""
     if not is_admin(current_user):
         raise ForbiddenError("Chỉ admin mới có quyền này")
     return current_user

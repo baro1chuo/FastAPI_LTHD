@@ -392,3 +392,37 @@ python -m alembic current     # 0c0490a1c7ab (head): Alembic đọc được URL
 python -m app.core.sample_data # chạy bằng async; CSDL đã đủ dữ liệu nên thêm 0
 ```
 Kiểm tra bằng script: `PRAGMA foreign_keys` = **1**; truy vấn async đếm được 18 động vật; app khởi động (lifespan seed) và `/api/health` trả `{"status": "ok"}`.
+
+---
+
+## Bước 9 – Chuyển trọn chuỗi repository → service → router sang async (22/10/2026)
+
+### Việc đã làm
+Chuyển theo thứ tự nhóm, chạy test sau mỗi nhóm:
+
+| Nhóm | File | Kết quả test sau khi chuyển |
+|---|---|---|
+| Users | `core/deps.py`, `repositories/user_repository.py`, `services/user_service.py`, `services/image_service.py`, `routers/user.py` | Chạy chung với Auth |
+| Auth | `services/auth_service.py`, `routers/auth.py` | `test_auth` + `test_users`: 14/15 qua (1 test gọi API đánh giá, lúc đó chưa chuyển) |
+| Animals | `services/i18n.py`, `repositories/settings_repository.py`, `lookup_repository.py`, `zone_repository.py`, `animal_repository.py`, `services/animal_service.py`, `routers/animals.py` | `test_animals`: 8/9 (1 test gọi API đánh giá) |
+| Reviews | `repositories/review_repository.py`, `services/review_service.py`, `routers/review.py` | reviews + animals + users: 24/25 (1 test gọi API cài đặt) |
+| Systems | `repositories/stats_repository.py`, `services/stats_service.py`, `settings_service.py`, `routers/systems.py` | |
+| Zones/Categories | `services/zone_service.py`, `category_service.py`, `routers/zone.py`, `categories.py` | **Toàn bộ: 38/38 qua** |
+| Test | `tests/conftest.py`, `tests/test_auth.py` | Nạp dữ liệu mẫu bằng `client.portal.call(...)`, tức chạy trong cùng event loop với app. |
+
+Mọi truy vấn đều có `await`: `db.get`, `db.scalar`, `db.scalars`, `db.execute`, `db.flush`, `db.merge`, `db.delete`, `db.commit`, `db.refresh`. Riêng `db.add` / `db.add_all` chỉ đưa object vào session (chưa có I/O) nên không cần `await`.
+
+### Giải thích
+- **Async đúng chỗ:** chỉ hàm có I/O (chờ SQLite, đọc file upload) mới là `async def` và `await`. Hàm thuần không có I/O (`_to_item`, `_to_dict`, `_pick`, `_select_translated`, `_apply_filters`) giữ `def`. Biến chúng thành async chỉ thêm chi phí mà không được gì.
+- **Không `asyncio.gather` trên cùng một session:** một `AsyncSession` chỉ chạy được 1 câu truy vấn tại một thời điểm. Ví dụ `get_dashboard` đếm 4 thứ, nhưng `await` lần lượt từng câu.
+- **Tránh MissingGreenlet:** `User.role` dùng `lazy="joined"`, nên role được nạp cùng user trong 1 câu. Sau `commit`, đọc cột do CSDL tự điền (`created_at`) thì phải `await db.refresh(obj)` trước.
+- **`require_admin`, `is_admin`, `require_token` giữ `def`:** chỉ so sánh vai trò / giải mã JWT, không có I/O.
+
+### Lệnh kiểm tra
+```bash
+python -m pytest -q        # 38 passed
+grep -rn "from sqlalchemy.orm import Session" app/repositories app/services app/routers   # không còn kết quả
+```
+
+### Điểm cần lưu ý
+- Thời gian chạy test tăng từ khoảng 28 giây lên khoảng 97 giây, vì băm mật khẩu PBKDF2 (nặng CPU) đang chạy **thẳng trong event loop** và chặn mọi request khác trong lúc băm. Bước 10 xử lý việc này.

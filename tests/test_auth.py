@@ -11,8 +11,12 @@ def test_register_success_stores_hash_and_lowercase_email(client):
     assert res.status_code == 201
     assert res.json()["email"] == "moi@example.com"
     assert "password" not in res.text  # không trả mật khẩu/hash ra ngoài
-    with SessionLocal() as db:
-        stored = user_repository.get_by_email(db, "moi@example.com").password_hash
+
+    async def _stored_hash():
+        async with SessionLocal() as db:
+            return (await user_repository.get_by_email(db, "moi@example.com")).password_hash
+
+    stored = client.portal.call(_stored_hash)  # chạy trong event loop của app
     assert stored != "matkhau123" and stored.startswith("pbkdf2_sha256$")
 
 
