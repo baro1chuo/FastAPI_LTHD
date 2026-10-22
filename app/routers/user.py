@@ -1,8 +1,9 @@
+"""Tầng router – nhóm API NGƯỜI DÙNG (/api/users). Router mỏng: nhận request, kiểm tra quyền, gọi user_service."""
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.deps import get_current_user, require_admin # lay nguoi dung hien tai, yeu cau admin tu ben depend
+from app.core.deps import get_current_user, require_admin
 from app.schemas.user import UserAdminResponse, UserProfileUpdate, UserResponse, UserStatus, UserStatusUpdate
 from app.services import user_service
 
@@ -11,26 +12,27 @@ router = APIRouter(
     tags=["Users"],
 )
 
-# -----DOI VOI NGUOI DUNG DA DANG NHAP-----
-@router.put("/update/me", response_model=UserResponse) #Cap nhat tai khoan ca nhan
+# ----- NGƯỜI DÙNG ĐÃ ĐĂNG NHẬP -----
+# Khai báo /me TRƯỚC /{user_id}: FastAPI so đường dẫn theo thứ tự khai báo
+@router.get("/me", response_model=UserResponse)
+def get_me(current_user=Depends(get_current_user)):
+    """UC08 – xem hồ sơ của chính mình (id lấy từ JWT)."""
+    return current_user
+
+
+@router.patch("/me", response_model=UserResponse)
 def update_me(
     data: UserProfileUpdate,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """UC08 – sửa họ tên, ảnh đại diện, đổi mật khẩu (gửi kèm object password)."""
+    """UC08 – sửa họ tên, ảnh đại diện, đổi mật khẩu (gửi kèm object password). Không sửa email.
+    400 nếu sai mật khẩu hiện tại."""
     return user_service.update_profile(db, current_user, data)
 
 
-# -----CHI DE TEST (khong can dang nhap) – XOA TRUOC KHI NOP/TRIEN KHAI-----
-@router.get("/test/all", response_model=list[UserAdminResponse])
-def list_users_for_test(db: Session = Depends(get_db)):
-    """CHỈ ĐỂ TEST: xem mọi tài khoản mà không cần token admin (không trả mật khẩu/hash)."""
-    return user_service.list_users(db, size=1000)
-
-
-# -----DOI VOI ADMIN-----
-@router.get("", response_model=list[UserAdminResponse]) #Xem danh sach
+# ----- ADMIN -----
+@router.get("", response_model=list[UserAdminResponse])
 def list_users(
     search: str | None = Query(None, description="Tìm theo họ tên hoặc email"),
     status: UserStatus | None = None,
@@ -43,7 +45,7 @@ def list_users(
     return user_service.list_users(db, search, status.value if status else None, page, size)
 
 
-@router.get("/{user_id}", response_model=UserAdminResponse) #Tim 1 user
+@router.get("/{user_id}", response_model=UserAdminResponse)
 def get_user(
     user_id: int,
     db: Session = Depends(get_db),
@@ -53,18 +55,18 @@ def get_user(
     return user_service.get_user(db, user_id)
 
 
-@router.patch("/{user_id}", response_model=UserAdminResponse) #Khoa/mo khoa/doi vai tro
-def update_user(
+@router.patch("/{user_id}/status", response_model=UserAdminResponse)
+def update_user_status(
     user_id: int,
     data: UserStatusUpdate,
     db: Session = Depends(get_db),
     admin=Depends(require_admin),
 ):
-    """UC14 – khóa / mở khóa / đổi vai trò; 403 nếu admin tự sửa mình, 404 nếu không có user/vai trò."""
+    """UC14 – khóa / mở khóa tài khoản; 403 nếu admin tự khóa mình, 404 nếu không có."""
     return user_service.set_status(db, admin, user_id, data)
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT) #Xoa tai khoan
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db),

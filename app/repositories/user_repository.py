@@ -1,4 +1,7 @@
-"""Truy vấn bảng USER và ROLE. Không chứa quy tắc nghiệp vụ, không commit (service commit)."""
+"""Tầng repository – truy vấn bảng USER và ROLE.
+
+Chỉ viết câu truy vấn; không kiểm tra quy tắc nghiệp vụ, không commit (service commit).
+"""
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -7,7 +10,7 @@ from app.models.user import User
 
 
 def get_by_id(db: Session, user_id: int) -> User | None:
-    """Lấy user theo id (kèm role); không có thì trả None."""
+    """Lấy user theo id (kèm role nhờ lazy="joined"); không có -> None."""
     return db.get(User, user_id)
 
 
@@ -16,21 +19,17 @@ def get_by_email(db: Session, email: str) -> User | None:
     return db.scalar(select(User).where(User.email == email))
 
 
-def get_role_by_id(db: Session, role_id: int) -> Role | None:
-    """Lấy vai trò theo id; không có thì trả None."""
-    return db.get(Role, role_id)
-
-
 def get_role_by_code(db: Session, code: str) -> Role | None:
-    """Lấy vai trò theo code: 'admin' | 'staff' | 'user'."""
+    """Lấy vai trò theo code: 'admin' | 'staff' | 'user'; không có -> None."""
     return db.scalar(select(Role).where(Role.code == code))
 
 
 def list_users(db: Session, search: str | None = None, status: str | None = None,
                offset: int = 0, limit: int = 20) -> list[User]:
-    """Danh sách user, mới tạo trước.
+    """UC14 – danh sách user, mới tạo trước.
 
-    search: tìm gần đúng theo họ tên hoặc email; status: 'active' | 'locked'; offset/limit: phân trang.
+    Tham số: search – tìm gần đúng theo họ tên hoặc email; status – 'active' | 'locked';
+    offset/limit – phân trang. Trả về: list User.
     """
     stmt = select(User)
     if search:
@@ -42,7 +41,7 @@ def list_users(db: Session, search: str | None = None, status: str | None = None
 
 
 def add(db: Session, user: User) -> User:
-    """Thêm user mới; flush để có user.id ngay, service tự commit."""
+    """Thêm user mới; flush để CSDL cấp user.id (chưa commit)."""
     db.add(user)
     db.flush()
     return user

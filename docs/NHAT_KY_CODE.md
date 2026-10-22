@@ -167,3 +167,50 @@ Mở `/docs`: đăng nhập `an@zooguide.vn`, bấm Authorize, gửi `POST /api/
 - Sửa/xóa đánh giá của người khác trả **403**, không phải 404. Đặc tả cho phép cả hai.
 - `GET /api/reviews` giờ **bắt buộc** `animal_id` (theo đặc tả chốt) và bỏ lọc `user_id` công khai.
 - Tìm theo tên không dấu ("binh" ra "Bình") chưa làm được, vì SQLite không bỏ dấu tiếng Việt.
+
+---
+
+## Bước 3 – Người dùng: đường dẫn mới, bỏ đổi vai trò, thêm `GET /me`, xóa `/test/all` (22/10/2026)
+
+### Việc đã làm
+| File | Thay đổi |
+|---|---|
+| `app/routers/user.py` | `PUT /update/me` thành **`PATCH /me`**; thêm **`GET /me`**; `PATCH /{id}` thành **`PATCH /{id}/status`**; **xóa** `GET /test/all` (đang lộ toàn bộ tài khoản không cần token). |
+| `app/schemas/user.py` | `UserStatusUpdate` chỉ còn `status` (bỏ `role_id`); `UserResponse` thêm `created_at`; `full_name: null` trả 422. |
+| `app/services/user_service.py` | `set_status` chỉ khóa/mở khóa; `update_profile` chỉ đổi field được gửi (gửi `avatar: null` thì xóa ảnh); docstring ghi UC và mã lỗi. |
+| `app/repositories/user_repository.py` | Bỏ `get_role_by_id` (không còn đổi vai trò). |
+
+### Giải thích
+- **`/me` thay cho `/{id}`:** id lấy từ JWT, nên người dùng không thể đổi số trong URL để xem hoặc sửa hồ sơ người khác.
+- **Khai báo `/me` trước `/{user_id}`:** FastAPI so đường dẫn theo thứ tự khai báo. Để sau thì "me" bị coi là `user_id` và trả 422.
+- **Email không sửa được (UC08):** schema `UserProfileUpdate` không có trường email. Client có gửi `email` thì Pydantic bỏ qua.
+- **Admin không tự khóa / tự xóa mình (UC14 E1):** tránh trường hợp hệ thống không còn admin nào.
+
+Ví dụ:
+```http
+PATCH /api/users/me
+Authorization: Bearer <token>
+{"full_name": "An Nguyễn", "password": {"current_password": "12345678", "new_password": "newpass99", "confirm_password": "newpass99"}}
+```
+```json
+{"full_name": "An Nguyễn", "email": "an@zooguide.vn", "avatar": null, "id": 2, "created_at": "2026-10-22T16:11:42"}
+```
+```http
+PATCH /api/users/2/status          (token admin)
+{"status": "locked"}
+```
+→ `200 {"id": 2, "status": "locked", ...}`. Sau đó user này đăng nhập nhận `403 {"detail": "Tài khoản đã bị khóa"}`.
+
+### Lệnh kiểm tra
+Mở `/docs` và thử lần lượt `GET /api/users/me`, `PATCH /api/users/me`, `PATCH /api/users/{id}/status`.
+
+Đã kiểm tra:
+- Đăng ký trùng email trả 409, mật khẩu ngắn trả 422.
+- Gửi `email` trong PATCH thì bị bỏ qua; sai mật khẩu hiện tại trả 400; xác nhận không khớp trả 422.
+- User thường gọi API admin trả 403. Admin tự khóa / tự xóa trả 403. Gửi `role_id` trả 422.
+- Bị khóa thì đăng nhập và gọi `/me` đều trả 403. Mở khóa xong dùng lại được.
+- Đường cũ: `PATCH /api/users/{id}` trả 405; `/test/all` không còn.
+
+### Điểm cần nhóm chốt
+- `GET /api/auth/me` và `GET /api/users/me` trả cùng dữ liệu. Giữ cả hai theo đặc tả chốt.
+- `GET /api/users` vẫn trả mảng, chưa có `total` để phân trang. Thêm nếu frontend cần.
