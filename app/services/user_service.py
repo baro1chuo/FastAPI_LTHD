@@ -1,5 +1,6 @@
 """Tầng service – nghiệp vụ tài khoản: UC06 Đăng ký, UC08 Xem/cập nhật hồ sơ, UC14 Quản lý tài khoản (admin)."""
 from fastapi import UploadFile
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleError, ConflictError, ForbiddenError, NotFoundError
@@ -21,12 +22,15 @@ async def create_user(db: AsyncSession, data: UserCreate) -> User:
     if await user_repository.get_by_email(db, email):  # await: chờ SQLite tìm email
         raise ConflictError("Email đã được sử dụng")
     role = await user_repository.get_role_by_code(db, "user")
+    # run_in_threadpool: PBKDF2 600.000 vòng là việc NẶNG CPU (~0,3–0,5 giây); gọi thẳng trong async def
+    # sẽ chặn event loop, mọi request khác phải đứng chờ. Đẩy sang luồng phụ để event loop tiếp tục phục vụ.
+    password_hash = await run_in_threadpool(hash_password, data.password.get_secret_value())
     user = await user_repository.add(db, User(
         full_name=data.full_name.strip(),
         email=email,
         avatar=data.avatar,
         role_id=role.id,
-        password_hash=hash_password(data.password.get_secret_value()),
+        password_hash=password_hash,
     ))
     await db.commit()  # commit ở service: repository chỉ add/flush, service quyết định khi nào lưu hẳn
     # refresh: nạp lại status, created_at do CSDL tự điền (server_default). Với async phải nạp tường minh,
@@ -48,9 +52,12 @@ async def update_profile(db: AsyncSession, current_user: User, data: UserProfile
         current_user.avatar = data.avatar  # null -> xóa ảnh đại diện
     if data.password is not None:
         # Phải đúng mật khẩu hiện tại mới cho đổi: tránh người khác dùng máy đang đăng nhập để đổi mật khẩu
-        if not verify_password(data.password.current_password.get_secret_value(), current_user.password_hash):
+        # run_in_threadpool: kiểm tra và băm mật khẩu đều nặng CPU, chạy ở luồng phụ để không chặn event loop
+        if not await run_in_threadpool(verify_password, data.password.current_password.get_secret_value(),
+                                       current_user.password_hash):
             raise BusinessRuleError("Mật khẩu hiện tại không đúng")
-        current_user.password_hash = hash_password(data.password.new_password.get_secret_value())
+        current_user.password_hash = await run_in_threadpool(
+            hash_password, data.password.new_password.get_secret_value())
     await db.commit()  # await: chờ SQLite ghi thay đổi
     return current_user
 

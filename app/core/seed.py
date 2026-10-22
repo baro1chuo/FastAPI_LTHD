@@ -1,4 +1,5 @@
 """Tầng core – dữ liệu mặc định thêm lúc khởi động app. Chỉ thêm bản ghi còn thiếu nên chạy lại nhiều lần vẫn an toàn."""
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -83,6 +84,7 @@ async def seed(db: AsyncSession) -> None:
         email = config.ADMIN_EMAIL.lower()
         if await db.scalar(select(User).where(User.email == email)) is None:
             admin_role = await db.scalar(select(Role).where(Role.code == "admin"))
-            db.add(User(full_name="Admin", email=email, role_id=admin_role.id,
-                        password_hash=hash_password(config.ADMIN_PASSWORD)))
+            # run_in_threadpool: băm mật khẩu nặng CPU, không chạy thẳng trong event loop
+            password_hash = await run_in_threadpool(hash_password, config.ADMIN_PASSWORD)
+            db.add(User(full_name="Admin", email=email, role_id=admin_role.id, password_hash=password_hash))
     await db.commit()  # await: chờ SQLite ghi hẳn toàn bộ dữ liệu mặc định

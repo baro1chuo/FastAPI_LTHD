@@ -11,6 +11,7 @@ Mọi tài khoản mẫu dùng mật khẩu SAMPLE_PASSWORD – không dùng d�
 import asyncio
 from decimal import Decimal
 
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -253,7 +254,8 @@ async def load_sample_data(db: AsyncSession) -> dict[str, int]:
 
     # Tài khoản: bỏ qua nếu email đã có (không đổi mật khẩu tài khoản cũ)
     role_ids = dict((await db.execute(select(Role.code, Role.id))).all())
-    password_hash = hash_password(SAMPLE_PASSWORD)  # băm 1 lần dùng chung cho mọi tài khoản mẫu
+    # băm 1 lần dùng chung cho mọi tài khoản mẫu; run_in_threadpool vì băm nặng CPU
+    password_hash = await run_in_threadpool(hash_password, SAMPLE_PASSWORD)
     for full_name, email, role in USERS:
         if await db.scalar(select(User.id).where(User.email == email)) is None:
             db.add(User(full_name=full_name, email=email, role_id=role_ids[role], password_hash=password_hash))

@@ -4,8 +4,10 @@ Chỉ nhận ảnh JPEG/PNG/WEBP/GIF, tối đa MAX_IMAGE_BYTES; tên file sinh 
 và không dùng tên do client đặt (tránh tên chứa "../" ghi ra ngoài thư mục).
 """
 import uuid
+from pathlib import Path
 
 from fastapi import UploadFile
+from fastapi.concurrency import run_in_threadpool
 
 from app.core import config
 from app.core.exceptions import BusinessRuleError
@@ -17,6 +19,12 @@ _ALLOWED = {
     "image/gif": (".gif", (b"GIF87a", b"GIF89a")),
     "image/webp": (".webp", (b"RIFF",)),
 }
+
+
+def _write_file(path: Path, data: bytes) -> None:
+    """Tạo thư mục (nếu chưa có) rồi ghi file xuống đĩa. Hàm đồng bộ, gọi qua run_in_threadpool."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
 
 
 async def save_image(upload: UploadFile, folder: str) -> str:
@@ -39,8 +47,8 @@ async def save_image(upload: UploadFile, folder: str) -> str:
     if not data.startswith(signatures) or (ext == ".webp" and data[8:12] != b"WEBP"):
         raise BusinessRuleError("File không phải ảnh hợp lệ")
 
-    target_dir = config.UPLOAD_DIR / folder
-    target_dir.mkdir(parents=True, exist_ok=True)
     filename = f"{uuid.uuid4().hex}{ext}"
-    (target_dir / filename).write_bytes(data)
+    # run_in_threadpool: ghi file bằng Path.write_bytes là thao tác đĩa ĐỒNG BỘ (chặn luồng tới khi ghi xong);
+    # chạy ở luồng phụ để event loop vẫn phục vụ request khác trong lúc ghi
+    await run_in_threadpool(_write_file, config.UPLOAD_DIR / folder / filename, data)
     return f"/static/uploads/{folder}/{filename}"

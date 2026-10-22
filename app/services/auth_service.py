@@ -2,6 +2,7 @@
 
 UC05 Đăng xuất không cần service: JWT không lưu trên server nên frontend tự xóa token (router chỉ trả 204).
 """
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AuthError, ForbiddenError
@@ -17,7 +18,9 @@ async def login(db: AsyncSession, data: LoginRequest) -> str:
     email nào đã đăng ký, UC07 E2); ForbiddenError (403) – tài khoản bị khóa (UC07 E3).
     """
     user = await user_repository.get_by_email(db, data.email.lower())  # await: chờ SQLite tìm user
-    if user is None or not verify_password(data.password, user.password_hash):
+    # run_in_threadpool: PBKDF2 600.000 vòng là việc NẶNG CPU (~0,3–0,5 giây); gọi thẳng trong async def
+    # sẽ chặn event loop, mọi request khác phải đứng chờ. Đẩy sang luồng phụ để event loop tiếp tục phục vụ.
+    if user is None or not await run_in_threadpool(verify_password, data.password, user.password_hash):
         raise AuthError("Email hoặc mật khẩu không đúng")
     if user.status == "locked":
         raise ForbiddenError("Tài khoản đã bị khóa")

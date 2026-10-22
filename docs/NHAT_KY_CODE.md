@@ -426,3 +426,55 @@ grep -rn "from sqlalchemy.orm import Session" app/repositories app/services app/
 
 ### Điểm cần lưu ý
 - Thời gian chạy test tăng từ khoảng 28 giây lên khoảng 97 giây, vì băm mật khẩu PBKDF2 (nặng CPU) đang chạy **thẳng trong event loop** và chặn mọi request khác trong lúc băm. Bước 10 xử lý việc này.
+
+---
+
+## Bước 10 – `run_in_threadpool` cho việc nặng CPU / ghi file (22/10/2026)
+
+### Việc đã làm
+| File | Thay đổi |
+|---|---|
+| `app/services/auth_service.py` | Đăng nhập: `await run_in_threadpool(verify_password, ...)`. |
+| `app/services/user_service.py` | Đăng ký: băm mật khẩu qua threadpool. Đổi mật khẩu: cả kiểm tra mật khẩu cũ và băm mật khẩu mới đều qua threadpool. |
+| `app/services/image_service.py` | Ghi file ảnh (`mkdir` + `write_bytes`) qua `run_in_threadpool(_write_file, ...)`. |
+| `app/core/seed.py`, `app/core/sample_data.py` | Băm mật khẩu admin / tài khoản mẫu qua threadpool. |
+
+`/api/health` và `/api/auth/logout` giữ `def`, không `await`: chúng không có I/O.
+
+### Giải thích
+- **Event loop chỉ có 1 luồng.** `await` giúp khi phải **chờ** (chờ SQLite, chờ mạng): trong lúc chờ, event loop đi phục vụ request khác. Nhưng PBKDF2 600.000 vòng là **tính toán**, không phải chờ: gọi thẳng trong `async def` thì event loop bận tính khoảng 0,3 giây và **mọi request khác phải đứng xếp hàng**. Đây là kiểu "async giả".
+- `run_in_threadpool(f, *args)` chạy hàm đồng bộ `f` ở một luồng phụ, và `await` chờ kết quả. Event loop được giải phóng ngay. `hashlib` nhả GIL khi băm, nên nhiều lần băm còn chạy song song được trên nhiều nhân CPU.
+- Ghi file bằng `Path.write_bytes` là I/O đồng bộ (chặn luồng tới khi ghi xong), nên cũng đưa vào threadpool.
+
+### Minh chứng (đo trên server thật, `uvicorn`)
+Gửi 5 request đăng nhập cùng lúc, trong lúc đó gọi `GET /api/health`:
+
+| | `/api/health` phải chờ | 5 đăng nhập xong sau |
+|---|---|---|
+| **Trước** Bước 10 (gọi thẳng `verify_password`) | **183 ms** | 1,09 s |
+| **Sau** Bước 10 (`run_in_threadpool`) | **5 ms** | 0,37 s |
+
+Thời gian chạy bộ test cũng giảm từ khoảng 97 giây (sau Bước 9) xuống khoảng **28 giây**.
+
+### Bảng: endpoint nào async, endpoint nào không, vì sao
+| Endpoint | Kiểu | Lý do |
+|---|---|---|
+| `GET /api/health` | `def` | Không đụng CSDL hay file, không có gì để chờ. |
+| `POST /api/auth/logout` | `def` | Chỉ giải mã JWT (HMAC rất nhanh), không đụng CSDL. |
+| `POST /api/auth/register` | `async def` + threadpool | Chờ SQLite (kiểm tra email, INSERT) + băm mật khẩu nặng CPU qua `run_in_threadpool`. |
+| `POST /api/auth/login` | `async def` + threadpool | Chờ SQLite tìm user + kiểm tra mật khẩu nặng CPU qua `run_in_threadpool`. |
+| `GET /api/auth/me`, `GET /api/users/me` | `async def` | Dependency `get_current_user` chờ SQLite lấy user theo id trong JWT. |
+| `PATCH /api/users/me` | `async def` + threadpool | Chờ SQLite; nếu có đổi mật khẩu thì kiểm tra / băm qua threadpool. |
+| `POST /api/users/{id}/image`, `POST /api/animals/{id}/image` | `async def` + threadpool | `await upload.read()` chờ đọc file từ request; ghi file xuống đĩa qua threadpool; chờ SQLite lưu đường dẫn. |
+| `GET/PATCH/DELETE /api/users...` (admin) | `async def` | Chờ SQLite. |
+| Toàn bộ `/api/animals...` | `async def` | Chờ SQLite (danh sách, chi tiết, liên quan, thêm/sửa/xóa). |
+| Toàn bộ `/api/reviews...` | `async def` | Chờ SQLite. |
+| `GET /api/zones`, `GET /api/categories` | `async def` | Chờ SQLite. |
+| `/api/systems/dashboard`, `/api/systems/settings` | `async def` | Chờ SQLite (các câu COUNT, đọc/ghi cài đặt). |
+
+Hàm phụ **không** async dù nằm trong service/repository: `_to_item`, `_to_dict`, `_translations` (chỉ ghép dữ liệu đã có); `_select_translated`, `_select_with_names`, `_apply_filters` (chỉ **dựng** câu SQL, chưa chạy); `require_admin`, `is_admin` (chỉ so sánh vai trò).
+
+### Lệnh kiểm tra
+```bash
+python -m pytest -q   # 38 passed (~28 giây)
+```
