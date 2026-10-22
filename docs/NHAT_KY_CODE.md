@@ -122,3 +122,48 @@ Kết quả gọi API sau khi nạp dữ liệu mẫu:
 ### Điểm cần nhóm chốt
 - DELETE `/api/animals/{id}` hiện vẫn **xóa thật** (kèm bản dịch, đánh giá), đã ghi TODO. Nhóm chốt: giữ, hay rút về khung.
 - Admin gửi token khi gọi `GET /api/animals` và `GET /api/animals/{id}` thì thấy cả động vật ẩn. `/related` thì luôn chỉ có động vật đang hiện.
+
+---
+
+## Bước 2 – Đánh giá: UC12 sửa/xóa của tôi, tìm theo tên, kèm tên người viết / động vật (22/10/2026)
+
+### Việc đã làm
+| File | Thay đổi |
+|---|---|
+| `app/repositories/review_repository.py` | JOIN `user` + `animal` + bản dịch để trả `user_name`, `animal_name`; lọc thêm theo tên người viết (`user_name`) và chỉ động vật đang hiện (`visible_only`); thêm `get_with_names`. |
+| `app/schemas/review.py` | `ReviewResponse` thêm `user_name`, `animal_name`. `ReviewUpdate` (UC12) bắt buộc gửi ít nhất 1 field, `rating` không được null. |
+| `app/services/review_service.py` | Thêm `update_my_review`, `delete_my_review` (kiểm tra quyền sở hữu), `search_by_username`; đánh giá vừa sửa về `pending` (hoặc `approved` nếu bật tự duyệt); sửa docstring UC05 thành **UC04**. |
+| `app/routers/review.py` | Thêm `PATCH`/`DELETE /api/reviews/me/{id}` và `GET /api/reviews/search?username=`; `GET /api/reviews` bắt buộc `animal_id`; nhận thêm `?lang=` để chọn ngôn ngữ tên động vật. |
+
+### Giải thích
+- **Quyền sở hữu (UC12):** server lấy `user_id` từ JWT, rồi so với `review.user_id`. Khác nhau trả **403**, nên user A không sửa được đánh giá của user B dù đoán được id.
+- **Sửa xong phải duyệt lại:** nếu không, người dùng có thể sửa một đánh giá đã duyệt thành nội dung xấu mà vẫn hiện công khai.
+- **JOIN để lấy tên:** bảng REVIEW chỉ lưu `userId` và `animalId`. Muốn hiện "Nguyễn Văn An đánh giá Hổ 5 sao" thì phải nối sang bảng `user` và `animal_translation`. Dùng LEFT JOIN cho bản dịch để động vật thiếu bản dịch vẫn ra được đánh giá.
+
+Ví dụ sửa đánh giá của mình:
+```http
+PATCH /api/reviews/me/13
+Authorization: Bearer <token của an@zooguide.vn>
+{"comment": "Rất hay"}
+```
+```json
+{"id": 13, "animal_id": 3, "animal_name": "Gấu ngựa", "user_id": 2, "user_name": "Nguyễn Văn An",
+ "rating": 4, "comment": "Rất hay", "status": "pending", "created_at": "2026-10-22T16:20:11", "lang": "vi"}
+```
+Ví dụ admin tìm theo tên: `GET /api/reviews/search?username=bình` trả về `{"items": [...3 đánh giá của Trần Thị Bình...], "total": 3, "average": 3.3}`.
+
+### Lệnh kiểm tra
+Mở `/docs`: đăng nhập `an@zooguide.vn`, bấm Authorize, gửi `POST /api/reviews`, rồi `PATCH /api/reviews/me/{id}`. Sau đó đăng nhập `binh@zooguide.vn` và sửa đúng id đó: nhận 403.
+
+Đã kiểm tra:
+- Hổ có 3 đánh giá công khai, điểm trung bình 4.7, đủ tên người viết.
+- Sửa của người khác trả 403; id không có trả 404; không token trả 401.
+- `rating: 9`, body rỗng, `rating: null` đều trả 422.
+- Sửa xong trạng thái về `pending`; đang bật tự duyệt thì về `approved`.
+- Xóa xong gửi lại được.
+- Tìm `bình` ra 3 đánh giá; user thường gọi `/search` trả 403.
+
+### Điểm cần nhóm chốt
+- Sửa/xóa đánh giá của người khác trả **403**, không phải 404. Đặc tả cho phép cả hai.
+- `GET /api/reviews` giờ **bắt buộc** `animal_id` (theo đặc tả chốt) và bỏ lọc `user_id` công khai.
+- Tìm theo tên không dấu ("binh" ra "Bình") chưa làm được, vì SQLite không bỏ dấu tiếng Việt.
