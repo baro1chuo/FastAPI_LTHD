@@ -1,4 +1,4 @@
-"""Dữ liệu MẪU để chạy thử / demo: khu vực, động vật (vi + en), tài khoản, đánh giá.
+"""Tầng core – dữ liệu MẪU để chạy thử / demo: khu vực, động vật (vi + en), tài khoản, đánh giá.
 
 Chạy:  python -m app.core.sample_data
 CHỈ THÊM bản ghi còn thiếu, không xóa / không ghi đè dữ liệu đã có trong CSDL:
@@ -8,12 +8,13 @@ CHỈ THÊM bản ghi còn thiếu, không xóa / không ghi đè dữ liệu đ
 - user đã đánh giá động vật đó -> bỏ qua
 Mọi tài khoản mẫu dùng mật khẩu SAMPLE_PASSWORD – không dùng dữ liệu này khi triển khai thật.
 """
+import asyncio
 from decimal import Decimal
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import SessionLocal, init_db
+from app.core.database import SessionLocal, engine, init_db
 from app.core.security import hash_password
 from app.models.animal import Animal, AnimalTranslation
 from app.models.category import Category
@@ -201,19 +202,19 @@ REVIEWS = (
 )
 
 
-def _zone_id_by_name(db: Session, name: str, lang: str) -> int | None:
+async def _zone_id_by_name(db: AsyncSession, name: str, lang: str) -> int | None:
     """id khu vực có tên này trong ngôn ngữ lang (UNIQUE(lang, name)); không có thì None."""
-    return db.scalar(select(ZoneTranslation.zone_id).where(ZoneTranslation.lang == lang,
-                                                          ZoneTranslation.name == name))
+    return await db.scalar(select(ZoneTranslation.zone_id).where(ZoneTranslation.lang == lang,
+                                                                ZoneTranslation.name == name))
 
 
-def _animal_name_taken(db: Session, name: str, lang: str) -> bool:
+async def _animal_name_taken(db: AsyncSession, name: str, lang: str) -> bool:
     """Tên hiển thị đã có ở động vật nào trong ngôn ngữ lang chưa (UNIQUE(lang, name))."""
-    return db.scalar(select(AnimalTranslation.animal_id).where(AnimalTranslation.lang == lang,
-                                                              AnimalTranslation.name == name)) is not None
+    return await db.scalar(select(AnimalTranslation.animal_id).where(AnimalTranslation.lang == lang,
+                                                                    AnimalTranslation.name == name)) is not None
 
 
-def load_sample_data(db: Session) -> dict[str, int]:
+async def load_sample_data(db: AsyncSession) -> dict[str, int]:
     """Thêm dữ liệu mẫu còn thiếu trong MỘT giao dịch, không xóa/sửa bản ghi đã có.
 
     Trả số bản ghi mới thêm theo từng loại: {"zones", "animals", "users", "reviews"}.
@@ -223,11 +224,11 @@ def load_sample_data(db: Session) -> dict[str, int]:
     # Khu vực: dùng lại khu đã có cùng tên tiếng Việt hoặc tiếng Anh
     zone_ids = {}
     for key, (color, hours, area, vi, en) in ZONES.items():
-        zone_id = _zone_id_by_name(db, vi[0], "vi") or _zone_id_by_name(db, en[0], "en")
+        zone_id = await _zone_id_by_name(db, vi[0], "vi") or await _zone_id_by_name(db, en[0], "en")
         if zone_id is None:
             zone = Zone(color=color, open_hours=hours, area_m2=Decimal(area))
             db.add(zone)
-            db.flush()
+            await db.flush()  # await: chờ CSDL cấp zone.id cho bản dịch
             zone_id = zone.id
             db.add_all([ZoneTranslation(zone_id=zone_id, lang="vi", name=vi[0], description=vi[1]),
                         ZoneTranslation(zone_id=zone_id, lang="en", name=en[0], description=en[1])])
@@ -235,50 +236,58 @@ def load_sample_data(db: Session) -> dict[str, int]:
         zone_ids[key] = zone_id
 
     # Động vật: bỏ qua nếu trùng tên khoa học hoặc trùng tên hiển thị
-    category_ids = dict(db.execute(select(Category.code, Category.id)).all())
+    category_ids = dict((await db.execute(select(Category.code, Category.id))).all())
     fields = ("name", "appearance", "distribution", "diet", "lifespan", "threat")
     for sci, zone, category, status, available, popularity, vi, en in ANIMALS:
-        if (db.scalar(select(Animal.id).where(Animal.scientific_name == sci)) is not None
-                or _animal_name_taken(db, vi[0], "vi") or _animal_name_taken(db, en[0], "en")):
+        if (await db.scalar(select(Animal.id).where(Animal.scientific_name == sci)) is not None
+                or await _animal_name_taken(db, vi[0], "vi") or await _animal_name_taken(db, en[0], "en")):
             continue
         animal = Animal(scientific_name=sci, zone_id=zone_ids[zone], category_id=category_ids[category],
                         conservation_status_code=status, available=available, popularity=popularity)
         db.add(animal)
-        db.flush()
+        await db.flush()
         for lang, values in (("vi", vi), ("en", en)):
             db.add(AnimalTranslation(animal_id=animal.id, lang=lang, **dict(zip(fields, values))))
         added["animals"] += 1
-    db.flush()
+    await db.flush()
 
     # Tài khoản: bỏ qua nếu email đã có (không đổi mật khẩu tài khoản cũ)
-    role_ids = dict(db.execute(select(Role.code, Role.id)).all())
+    role_ids = dict((await db.execute(select(Role.code, Role.id))).all())
     password_hash = hash_password(SAMPLE_PASSWORD)  # băm 1 lần dùng chung cho mọi tài khoản mẫu
     for full_name, email, role in USERS:
-        if db.scalar(select(User.id).where(User.email == email)) is None:
+        if await db.scalar(select(User.id).where(User.email == email)) is None:
             db.add(User(full_name=full_name, email=email, role_id=role_ids[role], password_hash=password_hash))
             added["users"] += 1
-    db.flush()
+    await db.flush()
 
     # Đánh giá: mỗi user 1 đánh giá / động vật -> bỏ qua nếu đã có
-    user_ids = dict(db.execute(select(User.email, User.id)).all())
-    animal_ids = dict(db.execute(select(Animal.scientific_name, Animal.id)).all())
+    user_ids = dict((await db.execute(select(User.email, User.id))).all())
+    animal_ids = dict((await db.execute(select(Animal.scientific_name, Animal.id))).all())
     for email, sci, rating, comment, status, lang in REVIEWS:
         user_id, animal_id = user_ids.get(email), animal_ids.get(sci)
         if user_id is None or animal_id is None:
             continue
-        if db.scalar(select(Review.id).where(Review.user_id == user_id, Review.animal_id == animal_id)) is None:
+        exists = await db.scalar(select(Review.id).where(Review.user_id == user_id, Review.animal_id == animal_id))
+        if exists is None:
             db.add(Review(user_id=user_id, animal_id=animal_id, rating=rating,
                           comment=comment, status=status, lang=lang))
             added["reviews"] += 1
 
-    db.commit()
+    await db.commit()  # await: chờ SQLite ghi hẳn toàn bộ dữ liệu mẫu (1 giao dịch)
     return added
 
 
+async def _main() -> dict[str, int]:
+    """Chạy từ dòng lệnh: seed dữ liệu mặc định, nạp dữ liệu mẫu, rồi đóng kết nối."""
+    await init_db()
+    async with SessionLocal() as session:
+        result = await load_sample_data(session)
+    await engine.dispose()  # đóng hết kết nối trước khi thoát chương trình
+    return result
+
+
 if __name__ == "__main__":
-    init_db()
-    with SessionLocal() as session:
-        result = load_sample_data(session)
+    result = asyncio.run(_main())
     print(f"Đã thêm {result['zones']} khu vực, {result['animals']} động vật, "
           f"{result['users']} tài khoản (mật khẩu {SAMPLE_PASSWORD}), {result['reviews']} đánh giá. "
           "Dữ liệu đã có được giữ nguyên.")

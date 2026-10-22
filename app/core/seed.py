@@ -1,6 +1,6 @@
-"""Dữ liệu mặc định thêm lúc khởi động. Chỉ thêm bản ghi còn thiếu nên chạy lại nhiều lần vẫn an toàn."""
+"""Tầng core – dữ liệu mặc định thêm lúc khởi động app. Chỉ thêm bản ghi còn thiếu nên chạy lại nhiều lần vẫn an toàn."""
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import config
 from app.core.security import hash_password
@@ -40,46 +40,49 @@ CATEGORIES = (
 )
 
 
-def seed(db: Session) -> None:
-    """Thêm ngôn ngữ, vai trò, mức bảo tồn, nhóm động vật, cài đặt, khu mẫu và admin (nếu có biến môi trường)."""
-    langs = set(db.scalars(select(Language.code)))
+async def seed(db: AsyncSession) -> None:
+    """Thêm ngôn ngữ, vai trò, mức bảo tồn, nhóm động vật, cài đặt, khu mẫu và admin (nếu có biến môi trường).
+
+    Mỗi "await db.scalars/get/flush" là chờ SQLite trả kết quả; commit 1 lần ở cuối cho cả giao dịch.
+    """
+    langs = set(await db.scalars(select(Language.code)))
     db.add_all(Language(code=c, name=n) for c, n in LANGUAGES if c not in langs)
 
-    roles = set(db.scalars(select(Role.code)))
+    roles = set(await db.scalars(select(Role.code)))
     db.add_all(Role(code=c, name=n) for c, n in ROLES if c not in roles)
 
-    statuses = set(db.scalars(select(ConservationStatus.code)))
+    statuses = set(await db.scalars(select(ConservationStatus.code)))
     for code, color, vi, en in CONSERVATION_STATUSES:
         if code not in statuses:
             db.add(ConservationStatus(code=code, color=color))
             db.add_all([ConservationStatusTranslation(status_code=code, lang="vi", name=vi),
                         ConservationStatusTranslation(status_code=code, lang="en", name=en)])
 
-    categories = set(db.scalars(select(Category.code)))
+    categories = set(await db.scalars(select(Category.code)))
     for code, vi, en in CATEGORIES:
         if code not in categories:
             category = Category(code=code)
             db.add(category)
-            db.flush()  # cần category.id cho bản dịch
+            await db.flush()  # await: chờ CSDL cấp category.id cho bản dịch
             db.add_all([CategoryTranslation(category_id=category.id, lang="vi", name=vi),
                         CategoryTranslation(category_id=category.id, lang="en", name=en)])
 
-    if db.get(SystemSettings, 1) is None:
+    if await db.get(SystemSettings, 1) is None:
         db.add(SystemSettings(id=1, zoo_name="ZooGuide", open_hours="07h00-17h00",
                               auto_approve=False, default_lang="vi"))
 
-    # ponytail: 1 khu mẫu để thêm được động vật khi chưa có API khu vực; bỏ khi zone_service xong
-    if db.scalar(select(Zone.id).limit(1)) is None:
+    # ponytail: 1 khu mẫu để thêm được động vật khi CSDL chưa có khu nào (không có API thêm khu vực)
+    if await db.scalar(select(Zone.id).limit(1)) is None:
         zone = Zone(color="#4CAF50", open_hours="07h00-17h00")
         db.add(zone)
-        db.flush()
+        await db.flush()
         db.add(ZoneTranslation(zone_id=zone.id, lang="vi", name="Khu mẫu"))
-    db.flush()
+    await db.flush()
 
     if config.ADMIN_EMAIL and config.ADMIN_PASSWORD:
         email = config.ADMIN_EMAIL.lower()
-        if db.scalar(select(User).where(User.email == email)) is None:
-            admin_role = db.scalar(select(Role).where(Role.code == "admin"))
+        if await db.scalar(select(User).where(User.email == email)) is None:
+            admin_role = await db.scalar(select(Role).where(Role.code == "admin"))
             db.add(User(full_name="Admin", email=email, role_id=admin_role.id,
                         password_hash=hash_password(config.ADMIN_PASSWORD)))
-    db.commit()
+    await db.commit()  # await: chờ SQLite ghi hẳn toàn bộ dữ liệu mặc định

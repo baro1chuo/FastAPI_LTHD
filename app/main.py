@@ -7,16 +7,18 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.core import config
-from app.core.database import init_db
+from app.core.database import engine, init_db
 from app.core.exceptions import AppError
 from app.routers import animals, auth, categories, health, review, systems, user, zone
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Chạy một lần khi khởi động: thêm dữ liệu mặc định còn thiếu (bảng do Alembic tạo trước)."""
-    init_db()
+    """Chạy một lần khi khởi động: thêm dữ liệu mặc định còn thiếu (bảng do Alembic tạo trước).
+    Khi tắt app: đóng hết kết nối CSDL."""
+    await init_db()  # await: chờ seed dữ liệu mặc định xuống SQLite
     yield
+    await engine.dispose()  # await: chờ đóng các kết nối trong pool
 
 
 app = FastAPI(title="Zoo API", version="0.1.0", lifespan=lifespan)

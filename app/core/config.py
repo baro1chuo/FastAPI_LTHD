@@ -2,8 +2,8 @@
 import os
 from pathlib import Path
 
-# Đường dẫn CSDL SQLite (file tạo trong thư mục app/database/)
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./app/database/zoo.db")
+# Đường dẫn CSDL SQLite (file trong app/database/). "+aiosqlite" = driver bất đồng bộ để dùng async/await
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./app/database/zoo.db")
 
 # Khóa ký JWT – BẮT BUỘC đổi khi triển khai thật (đặt biến môi trường SECRET_KEY)
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me-zooguide-nhom9-2026")

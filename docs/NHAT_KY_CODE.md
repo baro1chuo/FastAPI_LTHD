@@ -366,3 +366,29 @@ Chạy server thật: `python -m uvicorn app.main:app`. `/api/health` trả `{"s
 
 ### Điểm cần nhóm chốt
 - `pytest` và `httpx` chỉ dùng để chạy test. Nếu nhóm muốn tách riêng thì chuyển sang file `requirements-dev.txt`.
+
+---
+
+## Bước 8 – Hạ tầng async: engine, session, seed, khởi động app (22/10/2026)
+
+### Việc đã làm
+| File | Thay đổi |
+|---|---|
+| `app/core/config.py` | `DATABASE_URL` mặc định là `sqlite+aiosqlite:///./app/database/zoo.db`. |
+| `app/core/database.py` | `create_async_engine`, `async_sessionmaker(expire_on_commit=False)`, bật `PRAGMA foreign_keys = ON` qua sự kiện `connect` trên `engine.sync_engine` (dùng cursor); `get_db` là async generator; `init_db` là async. |
+| `app/core/seed.py` | `seed()` thành `async def`, mọi truy vấn đều `await`. |
+| `app/core/sample_data.py` | `load_sample_data()` async; chạy từ dòng lệnh bằng `asyncio.run`, đóng kết nối trước khi thoát. |
+| `app/main.py` | `lifespan`: `await init_db()` khi khởi động, `await engine.dispose()` khi tắt. |
+
+### Giải thích
+- **aiosqlite:** module `sqlite3` của Python là đồng bộ (chờ xong mới làm việc khác). `aiosqlite` chạy `sqlite3` trong một luồng riêng và trả kết quả qua `await`, nên event loop của FastAPI phục vụ được request khác trong lúc chờ đĩa.
+- **`expire_on_commit=False`:** mặc định, sau `commit` SQLAlchemy "quên" giá trị các thuộc tính và tự truy vấn lại khi đọc. Với async, việc tự truy vấn ngầm này không chạy được (không có `await`) và ném lỗi **MissingGreenlet**, nên phải tắt.
+- **PRAGMA qua `engine.sync_engine`:** engine async bọc bên trong một engine đồng bộ; sự kiện `connect` chỉ gắn được vào engine bên trong đó.
+- **Trạng thái tạm:** sau bước này, các endpoint có dùng CSDL vẫn viết kiểu đồng bộ và sẽ được chuyển ở Bước 9. Bước này chưa có endpoint mới.
+
+### Lệnh kiểm tra
+```bash
+python -m alembic current     # 0c0490a1c7ab (head): Alembic đọc được URL aiosqlite
+python -m app.core.sample_data # chạy bằng async; CSDL đã đủ dữ liệu nên thêm 0
+```
+Kiểm tra bằng script: `PRAGMA foreign_keys` = **1**; truy vấn async đếm được 18 động vật; app khởi động (lifespan seed) và `/api/health` trả `{"status": "ok"}`.
