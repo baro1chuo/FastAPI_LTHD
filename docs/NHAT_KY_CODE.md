@@ -266,3 +266,48 @@ Mở `/docs`, đăng nhập `admin@zooguide.vn`, bấm Authorize, rồi gọi `G
 ### Điểm cần nhóm chốt
 - UC15 còn "động vật nhiều đánh giá nhất" và "lọc theo khoảng thời gian" **chưa làm**, vì đặc tả chốt chỉ yêu cầu 4 số liệu.
 - "Khu mẫu" trong `seed.py` vẫn còn, nên có 6 khu vực. Bỏ dòng này nếu không cần.
+
+---
+
+## Bước 5 – Upload ảnh (multipart/form-data) cho người dùng và động vật (22/10/2026)
+
+### Việc đã làm
+| File | Thay đổi |
+|---|---|
+| `app/services/image_service.py` (mới) | `save_image`: chỉ nhận JPEG/PNG/WEBP/GIF, kiểm tra **chữ ký file** (không chỉ tin `content_type`), giới hạn 2 MB, đặt tên ngẫu nhiên bằng uuid, lưu vào `app/static/uploads/<thư mục>/`. |
+| `app/services/user_service.py` | `upload_avatar`: chỉ đổi được ảnh của **chính mình** (id trên URL phải trùng id trong JWT). |
+| `app/services/animal_service.py` | `upload_image` cho động vật (Admin). |
+| `app/routers/user.py` | `POST /api/users/{user_id}/image`. |
+| `app/routers/animals.py` | `POST /api/animals/{animal_id}/image`. |
+| `app/main.py` | Mount `/static` để xem ảnh qua URL. |
+| `app/core/config.py` | `STATIC_DIR`, `UPLOAD_DIR`, `MAX_IMAGE_BYTES` (đổi qua biến môi trường). |
+| `.gitignore`, `requirements.txt` | Bỏ qua `app/static/uploads/`; thêm `python-multipart==0.0.32` (FastAPI cần thư viện này để đọc form-data). |
+
+### Giải thích
+- **multipart/form-data:** JSON chỉ chứa chữ, không gửi được file nhị phân. Form-data chia request thành nhiều "phần", mỗi phần là một trường hoặc một file. Vì vậy upload ảnh có endpoint riêng, còn các trường chữ vẫn gửi bằng JSON ở `PATCH`.
+- **Vì sao kiểm tra chữ ký file:** `content_type` do client tự khai, có thể đặt `image/png` cho một file bất kỳ. Ảnh PNG thật luôn bắt đầu bằng các byte `89 50 4E 47...`, JPEG bằng `FF D8 FF`.
+- **Vì sao đặt tên bằng uuid:** không dùng tên client gửi, tránh tên kiểu `../../main.py` ghi đè file của server, và hai người tải `avatar.png` không ghi đè lên nhau.
+- CSDL chỉ lưu **đường dẫn** (`/static/uploads/avatars/xxx.png`), còn file nằm trên ổ đĩa.
+
+Ví dụ (trong `/docs` có nút "Choose File"):
+```http
+POST /api/users/2/image
+Authorization: Bearer <token của user id 2>
+Content-Type: multipart/form-data; boundary=...
+file = (avatar.png)
+```
+```json
+{"full_name": "Nguyễn Văn An", "email": "an@zooguide.vn", "avatar": "/static/uploads/avatars/3f2a9c...e1.png", "id": 2, "created_at": "..."}
+```
+Mở `http://127.0.0.1:8000/static/uploads/avatars/3f2a9c...e1.png` là thấy ảnh.
+
+### Lệnh kiểm tra
+Đã kiểm tra:
+- PNG/JPEG hợp lệ trả 200, xem được qua `/static`.
+- Đổi ảnh người khác trả 403; không token trả 401.
+- File `.txt` trả 400; file giả `image/png` trả 400; file WAV giả WEBP trả 400; ảnh > 2 MB trả 400; thiếu file trả 422.
+- Ảnh động vật: user thường trả 403; động vật không có trả 404.
+
+### Điểm cần nhóm chốt
+- Ảnh cũ chưa bị xóa khi đổi ảnh mới (file cũ còn trên đĩa). Thêm bước dọn ảnh nếu cần.
+- Giới hạn 2 MB và 4 định dạng là mình tự đặt; nhóm có thể đổi qua `MAX_IMAGE_BYTES`.

@@ -1,4 +1,5 @@
 """Tầng service – nghiệp vụ tài khoản: UC06 Đăng ký, UC08 Xem/cập nhật hồ sơ, UC14 Quản lý tài khoản (admin)."""
+from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import BusinessRuleError, ConflictError, ForbiddenError, NotFoundError
@@ -6,6 +7,7 @@ from app.core.security import hash_password, verify_password
 from app.models.user import User
 from app.repositories import user_repository
 from app.schemas.user import UserCreate, UserProfileUpdate, UserStatusUpdate
+from app.services import image_service
 
 
 def create_user(db: Session, data: UserCreate) -> User:
@@ -47,6 +49,20 @@ def update_profile(db: Session, current_user: User, data: UserProfileUpdate) -> 
         if not verify_password(data.password.current_password.get_secret_value(), current_user.password_hash):
             raise BusinessRuleError("Mật khẩu hiện tại không đúng")
         current_user.password_hash = hash_password(data.password.new_password.get_secret_value())
+    db.commit()
+    return current_user
+
+
+def upload_avatar(db: Session, current_user: User, user_id: int, upload: UploadFile) -> User:
+    """UC08 – Tải ảnh đại diện (multipart/form-data) cho CHÍNH MÌNH; lưu file rồi ghi đường dẫn vào cột avatar.
+
+    Lỗi: ForbiddenError (403) – user_id trên URL không phải của người đang đăng nhập;
+    BusinessRuleError (400) – không phải ảnh hợp lệ hoặc vượt dung lượng.
+    """
+    # Kiểm tra quyền sở hữu: id trên URL phải trùng id lấy từ JWT, không cho đổi ảnh người khác
+    if user_id != current_user.id:
+        raise ForbiddenError("Chỉ được đổi ảnh đại diện của chính mình")
+    current_user.avatar = image_service.save_image(upload, "avatars")
     db.commit()
     return current_user
 

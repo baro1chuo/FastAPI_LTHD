@@ -2,12 +2,14 @@
 
 Áp quy tắc nghiệp vụ (ẩn/hiện, trùng tên, tồn tại khóa ngoại), gọi repository, commit giao dịch.
 """
+from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import BusinessRuleError, ConflictError, NotFoundError
 from app.models.animal import Animal, AnimalTranslation
 from app.repositories import animal_repository, lookup_repository, zone_repository
 from app.schemas.animals import AnimalBase, AnimalCreate, AnimalTranslationBase, AnimalTranslationCreate, AnimalUpdate
+from app.services import image_service
 from app.services.i18n import default_lang, resolve_lang
 
 # Các cột của bảng ANIMAL và ANIMAL_TRANSLATION, lấy từ schema để không phải gõ lại
@@ -161,6 +163,17 @@ def update_animal(db: Session, animal_id: int, data: AnimalUpdate) -> dict:
     if translations:
         animal_repository.upsert_translations(db, animal_id, _translations(translations))
     db.commit()  # commit 1 lần cho cả thông tin chung và bản dịch
+    return _admin_view(db, animal)
+
+
+def upload_image(db: Session, animal_id: int, upload: UploadFile) -> dict:
+    """UC11 – Tải ảnh động vật (multipart/form-data); lưu file rồi ghi đường dẫn vào cột image.
+
+    Trả về: AnimalAdminResponse. Lỗi: 404 không có động vật; 400 không phải ảnh hợp lệ / vượt dung lượng.
+    """
+    animal = _get_or_404(db, animal_id)  # kiểm tra động vật trước để không lưu file "mồ côi"
+    animal.image = image_service.save_image(upload, "animals")
+    db.commit()
     return _admin_view(db, animal)
 
 

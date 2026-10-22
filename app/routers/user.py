@@ -1,5 +1,5 @@
 """Tầng router – nhóm API NGƯỜI DÙNG (/api/users). Router mỏng: nhận request, kiểm tra quyền, gọi user_service."""
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -29,6 +29,18 @@ def update_me(
     """UC08 – sửa họ tên, ảnh đại diện, đổi mật khẩu (gửi kèm object password). Không sửa email.
     400 nếu sai mật khẩu hiện tại."""
     return user_service.update_profile(db, current_user, data)
+
+
+@router.post("/{user_id}/image", response_model=UserResponse)
+def upload_avatar(
+    user_id: int,
+    file: UploadFile = File(..., description="Ảnh JPEG/PNG/WEBP/GIF, tối đa 2 MB"),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """UC08 – tải ảnh đại diện (multipart/form-data, field `file`) cho chính mình.
+    403 nếu user_id không phải của mình, 400 nếu không phải ảnh hợp lệ / quá dung lượng."""
+    return user_service.upload_avatar(db, current_user, user_id, file)
 
 
 # ----- ADMIN -----

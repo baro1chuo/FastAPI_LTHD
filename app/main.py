@@ -4,7 +4,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
+from app.core import config
 from app.core.database import init_db
 from app.core.exceptions import AppError
 from app.routers import animals, auth, categories, health, review, systems, user, zone
@@ -37,3 +39,7 @@ async def app_error_handler(request: Request, exc: AppError):
 
 for module in (health, auth, user, animals, review, zone, categories, systems):
     app.include_router(module.router)
+
+# Phục vụ ảnh đã tải lên: file app/static/uploads/animals/x.jpg -> URL /static/uploads/animals/x.jpg
+config.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)  # StaticFiles báo lỗi nếu thư mục chưa có
+app.mount("/static", StaticFiles(directory=config.STATIC_DIR), name="static")

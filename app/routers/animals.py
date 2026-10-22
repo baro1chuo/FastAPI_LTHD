@@ -1,7 +1,7 @@
 """Tầng router – nhóm API ĐỘNG VẬT (/api/animals). Router mỏng: nhận request, kiểm tra quyền, gọi animal_service."""
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -79,6 +79,17 @@ def update_animal(
 ):
     """UC11 – sửa một phần động vật; ẩn/hiện (xóa mềm) bằng {"available": false|true}."""
     return animal_service.update_animal(db, animal_id, data)
+
+
+@router.post("/{animal_id}/image", response_model=AnimalAdminResponse)
+def upload_animal_image(
+    animal_id: int,
+    file: UploadFile = File(..., description="Ảnh JPEG/PNG/WEBP/GIF, tối đa 2 MB"),
+    db: Session = Depends(get_db),
+    admin=Depends(require_admin),
+):
+    """UC11 – tải ảnh động vật (multipart/form-data, field `file`). 404 không có động vật, 400 ảnh không hợp lệ."""
+    return animal_service.upload_image(db, animal_id, file)
 
 
 @router.delete("/{animal_id}", status_code=status.HTTP_204_NO_CONTENT)

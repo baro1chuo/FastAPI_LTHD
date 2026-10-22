@@ -6,3 +6,4 @@ email-validator==2.3.0
 PyJWT==2.14.0
 alembic==1.20.1
 aiosqlite==0.22.1
+python-multipart==0.0.32
