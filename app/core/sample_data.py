@@ -17,7 +17,8 @@ from app.core.database import SessionLocal, init_db
 from app.core.security import hash_password
 from app.models.animal import Animal, AnimalTranslation
 from app.models.category import Category
-from app.models.identity import Role, User
+from app.models.role import Role
+from app.models.user import User
 from app.models.review import Review
 from app.models.zone import Zone, ZoneTranslation
 

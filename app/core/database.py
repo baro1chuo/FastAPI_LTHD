@@ -27,7 +27,7 @@ def init_db() -> None:
     """Tạo thư mục chứa file CSDL, tạo mọi bảng còn thiếu theo models/, rồi thêm dữ liệu mặc định."""
     # import trong hàm để đăng ký đủ model vào Base.metadata mà không vòng import khi load module
     from app.core.seed import seed
-    from app.models import animal, category, conservation_status, identity, language, map_point, review, settings, zone  # noqa: F401
+    from app.models import animal, category, conservation_status, language, map_point, review, role, settings, user, zone  # noqa: F401
     from app.models.base import Base
 
     if config.DATABASE_URL.startswith("sqlite:///"):

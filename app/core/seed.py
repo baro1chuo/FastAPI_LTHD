@@ -6,7 +6,8 @@ from app.core import config
 from app.core.security import hash_password
 from app.models.category import Category, CategoryTranslation
 from app.models.conservation_status import ConservationStatus, ConservationStatusTranslation
-from app.models.identity import Role, User
+from app.models.role import Role
+from app.models.user import User
 from app.models.language import Language
 from app.models.settings import SystemSettings
 from app.models.zone import Zone, ZoneTranslation

@@ -2,7 +2,8 @@
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.models.identity import Role, User
+from app.models.role import Role
+from app.models.user import User
 
 
 def get_by_id(db: Session, user_id: int) -> User | None:

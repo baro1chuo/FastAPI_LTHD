@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.exceptions import AuthError, ForbiddenError
 from app.core.security import decode_access_token
-from app.models.identity import User
+from app.models.user import User
 from app.repositories import user_repository
 
 # Đọc header "Authorization: Bearer <token>"; auto_error=False để tự trả 401 theo định dạng chung

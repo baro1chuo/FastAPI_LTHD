@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import BusinessRuleError, ConflictError, ForbiddenError, NotFoundError
 from app.core.security import hash_password, verify_password
-from app.models.identity import User
+from app.models.user import User
 from app.repositories import user_repository
 from app.schemas.user import UserCreate, UserProfileUpdate, UserStatusUpdate
 

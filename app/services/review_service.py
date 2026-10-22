@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConflictError, NotFoundError
-from app.models.identity import User
+from app.models.user import User
 from app.models.review import Review
 from app.repositories import animal_repository, review_repository, settings_repository
 from app.schemas.review import ReviewCreate, ReviewStatus, ReviewStatusUpdate
