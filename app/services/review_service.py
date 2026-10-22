@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import ConflictError, NotFoundError
 from app.models.user import User
 from app.models.review import Review
-from app.repositories import animal_repository, review_repository, settings_repository
+from app.repositories import review_repository, settings_repository
+from app.services import animal_service
 from app.schemas.review import ReviewCreate, ReviewStatus, ReviewStatusUpdate
 from app.services.i18n import resolve_lang
 
@@ -35,8 +36,8 @@ def create_review(db: Session, current_user: User, data: ReviewCreate) -> Review
     Động vật không có -> 404; đã đánh giá động vật này -> 409 (mỗi người 1 lần).
     Trạng thái: 'approved' nếu cài đặt tự duyệt đang bật, ngược lại 'pending'.
     """
-    if animal_repository.get_by_id(db, data.animal_id) is None:
-        raise NotFoundError("Không tìm thấy động vật")
+    # Động vật phải tồn tại VÀ đang hiển thị; đang ẩn -> 404 (UC09 E3)
+    animal_service.get_visible_animal(db, data.animal_id)
     if review_repository.get_by_user_and_animal(db, current_user.id, data.animal_id):
         raise ConflictError("Bạn đã đánh giá động vật này")
     auto_approve = settings_repository.get(db).auto_approve

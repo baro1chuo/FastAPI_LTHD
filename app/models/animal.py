@@ -1,3 +1,4 @@
+"""Tầng model – bảng ANIMAL (thông tin chung) và ANIMAL_TRANSLATION (nội dung theo từng ngôn ngữ)."""
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
@@ -16,7 +17,7 @@ from app.models.base import Base
 class Animal(Base):
     __tablename__ = "animal"
     __table_args__ = (
-        CheckConstraint("featured IN (0, 1)", name="ck_animal_featured"),
+        CheckConstraint("available IN (0, 1)", name="ck_animal_available"),
         CheckConstraint("popularity >= 0", name="ck_animal_popularity"),
         {"sqlite_autoincrement": True},
     )
@@ -37,8 +38,10 @@ class Animal(Base):
         ForeignKey("conservation_status.code", ondelete="RESTRICT"),
         nullable=False,
     )
-    featured: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("0")
+    # Trạng thái hiển thị: 1 = đang hiển thị cho khách, 0 = đang ẩn (xóa mềm, UC11).
+    # Mặc định 1 để động vật mới thêm hiện ngay.
+    available: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("1")
     )
     popularity: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     image: Mapped[str | None] = mapped_column(Text, server_default=text("NULL"))

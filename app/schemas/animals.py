@@ -1,11 +1,10 @@
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-# - File này sẽ chứa các schema dùng cho:
-# + animal: các thông tin cơ bản của các loài động vật
+"""Tầng schema – dữ liệu vào/ra của API động vật (Pydantic kiểm tra kiểu, sai -> 422).
 
-# + animal_translation: các bản dịch về thông tin của các loài động vật
-
-# + AnimalWithTranslation: các thông tin cơ bản kèm bản dịch của động vật.
-# Đây là lớp hỗn hợp(nested class). Lớp này mới là dữ liệu trả về cho FE
+- animal: thông tin chung của loài (tên khoa học, khu vực, nhóm, mức bảo tồn, ẩn/hiện...)
+- animal_translation: nội dung theo từng ngôn ngữ (tên, mô tả...)
+- AnimalWithTranslation: thông tin chung + bản dịch 1 ngôn ngữ, là dữ liệu trả về cho FE
+"""
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # ===== ANIMAL =====
 
@@ -16,7 +15,7 @@ class AnimalBase(BaseModel):
     category_id: int
     conservation_status_code: str = Field(min_length=2, max_length=2) # EX, EW, CR, EN, VU, NT, LC, DD, NE
     popularity: int = Field(0, ge=0) # mặc định là 0 khi tạo mới bên csdl
-    featured: bool = False # động vật nổi bật (hiện ở trang chủ)
+    available: bool = True # true = đang hiển thị, false = đang ẩn (xóa mềm)
     image: str | None = None # đường dẫn ảnh
 
 
@@ -51,27 +50,49 @@ class AnimalTranslationResponse(AnimalTranslationBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-# ===== INPUT CỦA ADMIN =====
-# Tạm thời ảnh gửi dạng url (chưa upload file)
-
-# Lớp dùng để tạo animal mới: thông tin chung + ít nhất 1 bản dịch
-class AnimalCreate(AnimalBase):
-    translations: list[AnimalTranslationCreate] = Field(min_length=1)
-
-    # mỗi ngôn ngữ chỉ được có 1 bản dịch
-    @field_validator("translations")
-    @classmethod
-    def unique_lang(cls, value: list[AnimalTranslationCreate]):
+def _check_unique_lang(value: list[AnimalTranslationCreate] | None):
+    """Mỗi ngôn ngữ chỉ được có 1 bản dịch trong cùng một request (trùng -> 422)."""
+    if value:
         langs = [tr.lang for tr in value]
         if len(langs) != len(set(langs)):
             raise ValueError("Mỗi ngôn ngữ chỉ được có 1 bản dịch")
-        return value
+    return value
 
 
-# Lớp dùng cho PUT /api/animals/{id}: GHI ĐÈ toàn bộ nên cần đủ trường như lúc tạo
-# Bản dịch nào không gửi lên sẽ bị xóa
-class AnimalUpdate(AnimalCreate):
-    pass # cái này nghĩa là lớp con kế thừa hết, không thêm gì mới
+# ===== INPUT CỦA ADMIN =====
+# Ảnh gửi dạng đường dẫn có sẵn; muốn tải file ảnh thì dùng POST /api/animals/{id}/image
+
+# Lớp dùng để tạo animal mới (POST): thông tin chung + ít nhất 1 bản dịch
+class AnimalCreate(AnimalBase):
+    translations: list[AnimalTranslationCreate] = Field(min_length=1)
+
+    _unique_lang = field_validator("translations")(_check_unique_lang)
+
+
+# Lớp dùng cho PATCH /api/animals/{id}: SỬA MỘT PHẦN, field nào không gửi thì giữ nguyên
+# (service dùng model_dump(exclude_unset=True) để chỉ lấy field client thật sự gửi).
+# Ẩn/hiện động vật (xóa mềm): chỉ gửi {"available": false} hoặc {"available": true}.
+# translations: mỗi bản dịch gửi lên THAY THẾ bản dịch cùng ngôn ngữ; ngôn ngữ không gửi giữ nguyên.
+class AnimalUpdate(BaseModel):
+    scientific_name: str | None = Field(None, min_length=1, max_length=150)
+    zone_id: int | None = None
+    category_id: int | None = None
+    conservation_status_code: str | None = Field(None, min_length=2, max_length=2)
+    popularity: int | None = Field(None, ge=0)
+    available: bool | None = None
+    image: str | None = None
+    translations: list[AnimalTranslationCreate] | None = None
+
+    _unique_lang = field_validator("translations")(_check_unique_lang)
+
+    # Gửi null cho cột bắt buộc (vd {"zone_id": null}) -> 422 thay vì lỗi NOT NULL ở CSDL (500).
+    # Chỉ image được phép null (xóa ảnh).
+    @model_validator(mode="after")
+    def _no_null_required(self):
+        for field in self.model_fields_set - {"image"}:
+            if getattr(self, field) is None:
+                raise ValueError(f"Trường '{field}' không được để null")
+        return self
 
 
 # ===== OUTPUT =====
@@ -85,7 +106,7 @@ class AnimalListItem(BaseModel):
     zone_id: int
     category_id: int
     conservation_status_code: str
-    featured: bool
+    available: bool # khách luôn thấy true; admin thấy cả false (động vật đang ẩn)
     popularity: int
 
 

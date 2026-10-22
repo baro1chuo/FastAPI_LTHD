@@ -43,7 +43,8 @@ ZONES = {
                 ("Reptile & Aquatic Zone", "Crocodiles, pythons, snakes, amphibians and rare freshwater fish.")),
 }
 
-# (tên khoa học, khu, nhóm, mức bảo tồn, nổi bật, độ phổ biến, bản dịch vi, bản dịch en)
+# (tên khoa học, khu, nhóm, mức bảo tồn, đang hiển thị, độ phổ biến, bản dịch vi, bản dịch en)
+# Kỳ giông Mexico để available=False (đang ẩn) làm ví dụ xóa mềm cho UC11
 # bản dịch: (tên, ngoại hình, phân bố, thức ăn, tuổi thọ, mối đe dọa)
 ANIMALS = (
     ("Panthera tigris", "carnivore", "mammal", "EN", True, 980,
@@ -60,14 +61,14 @@ ANIMALS = (
      ("Lion", "Tawny coat; males have a thick mane. Lives in social groups called prides.",
       "Sub-Saharan Africa and a small population in India.", "Meat: antelopes, zebras, buffalo.",
       "10–14 years in the wild.", "Habitat loss and conflict with humans.")),
-    ("Ursus thibetanus", "carnivore", "mammal", "VU", False, 540,
+    ("Ursus thibetanus", "carnivore", "mammal", "VU", True, 540,
      ("Gấu ngựa", "Lông đen, có vệt lông trắng hình chữ V trên ngực.",
       "Rừng núi châu Á, gồm cả miền Bắc Việt Nam.", "Ăn tạp: quả, mật ong, côn trùng, động vật nhỏ.",
       "Khoảng 25 năm.", "Nuôi lấy mật, săn bắt, mất rừng."),
      ("Asian black bear", "Black fur with a white V-shaped patch on the chest.",
       "Forested mountains of Asia, including northern Vietnam.", "Omnivore: fruit, honey, insects, small animals.",
       "About 25 years.", "Bile farming, hunting and deforestation.")),
-    ("Ailurus fulgens", "carnivore", "mammal", "EN", False, 610,
+    ("Ailurus fulgens", "carnivore", "mammal", "EN", True, 610,
      ("Gấu trúc đỏ", "Cỡ con mèo nhà, lông nâu đỏ, đuôi dài có khoanh.",
       "Rừng ôn đới vùng Himalaya và Tây Nam Trung Quốc.", "Chủ yếu lá tre, thêm quả và trứng chim.",
       "8–10 năm.", "Mất và chia cắt rừng, săn bắt."),
@@ -81,7 +82,7 @@ ANIMALS = (
      ("Red-shanked douc", "Golden-orange face and maroon legs, called the 'queen of primates'.",
       "Central Vietnam, Laos and Cambodia.", "Young leaves, fruit, flowers.",
       "About 25 years.", "Hunting and deforestation.")),
-    ("Nomascus leucogenys", "primate", "mammal", "CR", False, 430,
+    ("Nomascus leucogenys", "primate", "mammal", "CR", True, 430,
      ("Vượn đen má trắng", "Con đực lông đen má trắng, con cái lông vàng nhạt. Hót vang vào buổi sáng.",
       "Bắc Lào, Tây Bắc Việt Nam và Vân Nam (Trung Quốc).", "Quả chín, lá non, côn trùng.",
       "Khoảng 30 năm.", "Săn bắt làm thú cưng, mất rừng."),
@@ -102,14 +103,14 @@ ANIMALS = (
      ("Giraffe", "The tallest land animal, nearly 6 m tall, with a brown patched coat.",
       "African savannas.", "Acacia leaves and tall shrubs.",
       "20–25 years.", "Habitat loss and poaching.")),
-    ("Equus quagga", "savanna", "mammal", "NT", False, 650,
+    ("Equus quagga", "savanna", "mammal", "NT", True, 650,
      ("Ngựa vằn", "Sọc đen trắng, mỗi con có hoa văn sọc riêng như vân tay.",
       "Thảo nguyên Đông và Nam châu Phi.", "Cỏ.",
       "Khoảng 25 năm.", "Săn bắt và mất đồng cỏ."),
      ("Plains zebra", "Black and white stripes, each pattern unique like a fingerprint.",
       "Grasslands of eastern and southern Africa.", "Grass.",
       "About 25 years.", "Hunting and loss of grassland.")),
-    ("Hippopotamus amphibius", "savanna", "mammal", "VU", False, 580,
+    ("Hippopotamus amphibius", "savanna", "mammal", "VU", True, 580,
      ("Hà mã", "Thân to, da dày, dành phần lớn ban ngày ngâm mình dưới nước.",
       "Sông hồ châu Phi cận Sahara.", "Cỏ, ăn vào ban đêm.",
       "40–50 năm.", "Săn lấy thịt và răng nanh, mất nguồn nước."),
@@ -123,14 +124,14 @@ ANIMALS = (
      ("Green peafowl", "Iridescent green plumage; males have a long fan-shaped train.",
       "Southeast Asia, including Vietnam.", "Seeds, insects, small reptiles.",
       "About 20 years.", "Hunting, trapping and deforestation.")),
-    ("Phoenicopterus roseus", "bird", "bird", "LC", False, 520,
+    ("Phoenicopterus roseus", "bird", "bird", "LC", True, 520,
      ("Hồng hạc lớn", "Lông hồng nhạt, chân dài, thường đứng một chân.",
       "Châu Phi, Nam Âu, Trung Đông và Nam Á.", "Tôm nhỏ, tảo, lọc qua mỏ.",
       "30–40 năm.", "Mất vùng đất ngập nước."),
      ("Greater flamingo", "Pale pink feathers, long legs, often stands on one leg.",
       "Africa, southern Europe, the Middle East and South Asia.", "Small shrimp and algae, filtered through the beak.",
       "30–40 years.", "Loss of wetlands.")),
-    ("Struthio camelus", "bird", "bird", "LC", False, 480,
+    ("Struthio camelus", "bird", "bird", "LC", True, 480,
      ("Đà điểu châu Phi", "Chim lớn nhất thế giới, không bay được nhưng chạy tới khoảng 70 km/h.",
       "Thảo nguyên và vùng khô hạn châu Phi.", "Cây cỏ, hạt, côn trùng.",
       "30–40 năm.", "Săn bắt, mất môi trường sống."),
@@ -144,14 +145,14 @@ ANIMALS = (
      ("Siamese crocodile", "3–4 m long with a broad snout and olive-green skin.",
       "Southeast Asia; Vietnam has a population in Cat Tien National Park.", "Fish, frogs, snakes, small mammals.",
       "About 50 years.", "Wetland loss and hybridisation in farms.")),
-    ("Malayopython reticulatus", "reptile", "reptile", "LC", False, 450,
+    ("Malayopython reticulatus", "reptile", "reptile", "LC", True, 450,
      ("Trăn gấm", "Một trong những loài rắn dài nhất thế giới, hoa văn hình mắt lưới.",
       "Đông Nam Á và Nam Á.", "Thú và chim, giết mồi bằng cách siết.",
       "20–25 năm.", "Săn lấy da."),
      ("Reticulated python", "One of the longest snakes in the world, with a net-like pattern.",
       "Southeast and South Asia.", "Mammals and birds, killed by constriction.",
       "20–25 years.", "Hunting for skin.")),
-    ("Ophiophagus hannah", "reptile", "reptile", "VU", False, 560,
+    ("Ophiophagus hannah", "reptile", "reptile", "VU", True, 560,
      ("Rắn hổ mang chúa", "Loài rắn độc dài nhất thế giới, có thể dựng cao phần đầu khi bị đe dọa.",
       "Rừng Nam Á và Đông Nam Á.", "Chủ yếu là các loài rắn khác.",
       "Khoảng 20 năm.", "Mất rừng, buôn bán làm thuốc."),
@@ -165,7 +166,7 @@ ANIMALS = (
      ("Axolotl", "Stays in larval form for life, with feathery external gills; can regrow limbs.",
       "Only in the Xochimilco canal system, Mexico.", "Worms, insect larvae, small fish.",
       "10–15 years.", "Water pollution, urbanisation, invasive fish.")),
-    ("Scleropages formosus", "reptile", "fish", "EN", False, 410,
+    ("Scleropages formosus", "reptile", "fish", "EN", True, 410,
      ("Cá rồng châu Á", "Thân dài, vảy lớn óng ánh, có hai râu ở cằm.",
       "Sông hồ Đông Nam Á.", "Cá nhỏ, côn trùng, ếch.",
       "Trên 20 năm.", "Đánh bắt làm cá cảnh, mất môi trường sống."),
@@ -236,12 +237,12 @@ def load_sample_data(db: Session) -> dict[str, int]:
     # Động vật: bỏ qua nếu trùng tên khoa học hoặc trùng tên hiển thị
     category_ids = dict(db.execute(select(Category.code, Category.id)).all())
     fields = ("name", "appearance", "distribution", "diet", "lifespan", "threat")
-    for sci, zone, category, status, featured, popularity, vi, en in ANIMALS:
+    for sci, zone, category, status, available, popularity, vi, en in ANIMALS:
         if (db.scalar(select(Animal.id).where(Animal.scientific_name == sci)) is not None
                 or _animal_name_taken(db, vi[0], "vi") or _animal_name_taken(db, en[0], "en")):
             continue
         animal = Animal(scientific_name=sci, zone_id=zone_ids[zone], category_id=category_ids[category],
-                        conservation_status_code=status, featured=featured, popularity=popularity)
+                        conservation_status_code=status, available=available, popularity=popularity)
         db.add(animal)
         db.flush()
         for lang, values in (("vi", vi), ("en", en)):

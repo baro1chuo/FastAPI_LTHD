@@ -1,5 +1,8 @@
-"""Truy vấn bảng ANIMAL và ANIMAL_TRANSLATION. Không chứa quy tắc nghiệp vụ, không commit."""
-from sqlalchemy import Select, case, delete as sql_delete, func, or_, select
+"""Tầng repository – truy vấn bảng ANIMAL và ANIMAL_TRANSLATION.
+
+Chỉ viết câu truy vấn; không kiểm tra quy tắc nghiệp vụ, không commit (service commit 1 lần cho cả giao dịch).
+"""
+from sqlalchemy import Select, case, func, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from app.models.animal import Animal, AnimalTranslation
@@ -8,14 +11,17 @@ from app.models.animal import Animal, AnimalTranslation
 def _select_translated(lang: str, default_lang: str) -> tuple[Select, type, type, type]:
     """Câu SELECT động vật kèm 3 bản dịch (LEFT JOIN): ngôn ngữ đang chọn, ngôn ngữ mặc định, bản bất kỳ.
 
-    Nhờ LEFT JOIN, động vật chưa có bản dịch ngôn ngữ đang chọn vẫn hiện (dùng bản dự phòng).
-    Trả (câu select, alias đang chọn, alias mặc định, alias bất kỳ).
+    Tham số: lang – ngôn ngữ client chọn; default_lang – ngôn ngữ mặc định trong cài đặt.
+    Trả về: (câu select, alias bản dịch đang chọn, alias mặc định, alias bất kỳ).
     """
     tr = aliased(AnimalTranslation)
     tr_def = aliased(AnimalTranslation)
     tr_any = aliased(AnimalTranslation)
+    # Bản dịch "bất kỳ" = ngôn ngữ có mã nhỏ nhất của động vật đó (dự phòng cuối cùng)
     any_lang = (select(func.min(AnimalTranslation.lang))
                 .where(AnimalTranslation.animal_id == Animal.id).correlate(Animal).scalar_subquery())
+    # LEFT JOIN (không phải JOIN thường) để động vật thiếu bản dịch ngôn ngữ đang chọn vẫn hiện,
+    # khi đó dùng bản dịch mặc định, rồi tới bản bất kỳ (quy tắc UC02: thiếu bản dịch -> dùng mặc định)
     stmt = (
         select(Animal, tr, tr_def, tr_any)
         .outerjoin(tr, (tr.animal_id == Animal.id) & (tr.lang == lang))
@@ -32,15 +38,18 @@ def _pick(rows) -> list[tuple[Animal, AnimalTranslation | None]]:
 
 def list_animals(db: Session, lang: str, default_lang: str, search: str | None = None,
                  category_id: int | None = None, zone_id: int | None = None,
-                 featured: bool | None = None, sort: str = "name",
+                 sort: str = "name", include_hidden: bool = False,
                  offset: int = 0, limit: int = 20) -> tuple[list[tuple[Animal, AnimalTranslation | None]], int]:
-    """Danh sách động vật đã lọc + phân trang. Trả (các cặp (animal, bản dịch), tổng số kết quả).
+    """UC01 – danh sách động vật đã lọc + phân trang.
 
-    search: tìm gần đúng theo tên (2 ngôn ngữ) hoặc tên khoa học.
-    sort: 'name' (A-Z) | 'popular' (phổ biến nhất) | 'newest' (mới thêm).
+    Tham số: search – tìm gần đúng theo tên hiển thị hoặc tên khoa học; category_id/zone_id – lọc;
+    sort – 'name' (A-Z) | 'popular' | 'newest'; include_hidden – True: lấy cả động vật đang ẩn (admin).
+    Trả về: (các cặp (animal, bản dịch), tổng số kết quả trước phân trang).
     """
     stmt, tr, tr_def, tr_any = _select_translated(lang, default_lang)
     display_name = func.coalesce(tr.name, tr_def.name, tr_any.name, Animal.scientific_name)
+    if not include_hidden:
+        stmt = stmt.where(Animal.available.is_(True))  # khách chỉ thấy động vật đang hiển thị
     if search:
         pattern = f"%{search}%"
         stmt = stmt.where(or_(display_name.ilike(pattern), Animal.scientific_name.ilike(pattern)))
@@ -48,9 +57,8 @@ def list_animals(db: Session, lang: str, default_lang: str, search: str | None =
         stmt = stmt.where(Animal.category_id == category_id)
     if zone_id is not None:
         stmt = stmt.where(Animal.zone_id == zone_id)
-    if featured is not None:
-        stmt = stmt.where(Animal.featured == featured)
 
+    # Đếm tổng TRƯỚC khi cắt trang để FE tính được số trang
     total = db.scalar(select(func.count()).select_from(stmt.subquery()))
     order = {
         "popular": (Animal.popularity.desc(), Animal.id),
@@ -62,10 +70,14 @@ def list_animals(db: Session, lang: str, default_lang: str, search: str | None =
 
 def list_related(db: Session, animal: Animal, lang: str, default_lang: str,
                  limit: int = 6) -> list[tuple[Animal, AnimalTranslation | None]]:
-    """Động vật cùng nhóm HOẶC cùng khu vực, trừ chính nó; cùng nhóm xếp trước, rồi theo độ phổ biến."""
+    """UC03 – động vật cùng nhóm HOẶC cùng khu vực, đang hiển thị, trừ chính nó.
+
+    Cùng nhóm xếp trước (quy tắc UC03), rồi theo độ phổ biến. Trả về các cặp (animal, bản dịch).
+    """
     stmt, *_ = _select_translated(lang, default_lang)
     stmt = stmt.where(
         Animal.id != animal.id,
+        Animal.available.is_(True),  # không gợi ý động vật đang ẩn
         or_(Animal.category_id == animal.category_id, Animal.zone_id == animal.zone_id),
     ).order_by(
         case((Animal.category_id == animal.category_id, 0), else_=1),
@@ -76,17 +88,17 @@ def list_related(db: Session, animal: Animal, lang: str, default_lang: str,
 
 
 def get_by_id(db: Session, animal_id: int) -> Animal | None:
-    """Lấy động vật theo id; không có thì trả None."""
+    """Lấy động vật theo id (kể cả đang ẩn – service quyết định ai được xem); không có -> None."""
     return db.get(Animal, animal_id)
 
 
 def get_translation(db: Session, animal_id: int, lang: str) -> AnimalTranslation | None:
-    """Lấy bản dịch của một động vật theo ngôn ngữ; không có thì trả None."""
+    """Bản dịch của một động vật theo ngôn ngữ (khóa chính animalId + lang); không có -> None."""
     return db.get(AnimalTranslation, (animal_id, lang))
 
 
 def list_translations(db: Session, animal_id: int) -> list[AnimalTranslation]:
-    """Mọi bản dịch của một động vật (admin dùng để sửa)."""
+    """Mọi bản dịch của một động vật, sắp theo mã ngôn ngữ (admin dùng để xem/sửa)."""
     return list(db.scalars(
         select(AnimalTranslation).where(AnimalTranslation.animal_id == animal_id).order_by(AnimalTranslation.lang)
     ))
@@ -109,9 +121,9 @@ def exists_name(db: Session, lang: str, name: str, exclude_id: int | None = None
 
 
 def add(db: Session, animal: Animal, translations: list[AnimalTranslation]) -> Animal:
-    """Thêm động vật kèm bản dịch; flush để có animal.id, service tự commit."""
+    """Thêm động vật kèm bản dịch. Trả về animal đã có id."""
     db.add(animal)
-    db.flush()
+    db.flush()  # flush (chưa commit) để CSDL cấp animal.id, cần cho khóa ngoại của bản dịch
     for tr in translations:
         tr.animal_id = animal.id
     db.add_all(translations)
@@ -119,16 +131,16 @@ def add(db: Session, animal: Animal, translations: list[AnimalTranslation]) -> A
     return animal
 
 
-def replace_translations(db: Session, animal_id: int, translations: list[AnimalTranslation]) -> None:
-    """Xóa toàn bộ bản dịch cũ rồi thêm bản mới (dùng cho PUT ghi đè)."""
-    db.execute(sql_delete(AnimalTranslation).where(AnimalTranslation.animal_id == animal_id))
+def upsert_translations(db: Session, animal_id: int, translations: list[AnimalTranslation]) -> None:
+    """Thêm hoặc thay thế bản dịch theo từng ngôn ngữ (PATCH); ngôn ngữ không gửi lên giữ nguyên."""
     for tr in translations:
         tr.animal_id = animal_id
-    db.add_all(translations)
+        # merge: đã có bản dịch (animalId, lang) thì chép đè giá trị mới, chưa có thì thêm mới
+        db.merge(tr)
     db.flush()
 
 
 def delete(db: Session, animal: Animal) -> None:
-    """Xóa động vật; bản dịch và đánh giá tự xóa theo ON DELETE CASCADE."""
+    """Xóa vĩnh viễn động vật; bản dịch và đánh giá tự xóa theo ON DELETE CASCADE trong CSDL."""
     db.delete(animal)
     db.flush()
