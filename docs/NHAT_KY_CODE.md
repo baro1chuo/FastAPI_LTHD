@@ -478,3 +478,33 @@ Hàm phụ **không** async dù nằm trong service/repository: `_to_item`, `_to
 ```bash
 python -m pytest -q   # 38 passed (~28 giây)
 ```
+
+---
+
+## Kết thúc – Tổng kết (22/10/2026)
+
+**Cập nhật tài liệu:**
+- `CLAUDE.md` theo bản chốt: UC12 là "Sửa/xóa đánh giá của tôi"; UC04 Xem đánh giá / UC05 Đăng xuất; cột `available`; async; Alembic; đặc tả API mới, đường dẫn `/api/systems`.
+- Tạo `README.md`: cách chạy, tài khoản mẫu, chạy test, quy trình thêm migration.
+
+**Kiểm tra cuối** (làm giống một thành viên mới pull về):
+```bash
+rm app/database/zoo.db
+python -m alembic upgrade head    # tạo 15 bảng
+python -m alembic check           # No new upgrade operations detected.
+python -m app.core.sample_data    # 5 khu vực, 18 động vật, 5 tài khoản, 12 đánh giá
+python -m uvicorn app.main:app    # /api/health trả {"status":"ok"}
+python -m pytest -q               # 38 passed
+```
+
+**Trạng thái endpoint:** đủ 33 endpoint theo đặc tả chốt đã chạy và có test. Các điểm còn TODO / cần nhóm chốt:
+
+| Điểm | Hiện trạng |
+|---|---|
+| Xóa thật động vật (`DELETE /api/animals/{id}`) | Đang xóa thật kèm bản dịch + đánh giá, có ghi TODO. Nhóm chốt: giữ, hay rút về khung. |
+| `POST /api/auth/logout` | Chỉ trả 204, không thay đổi gì ở server. Giữ hay bỏ? |
+| UC15: "động vật nhiều đánh giá nhất", "lọc theo khoảng thời gian" | Chưa làm (đặc tả chốt chỉ yêu cầu 4 số liệu). |
+| Phân trang `GET /api/users` | Trả mảng, chưa có `total`. |
+| Ảnh cũ khi đổi ảnh mới | File cũ chưa bị xóa khỏi đĩa. |
+| "Khu mẫu" trong `seed.py` | Vẫn tạo khi CSDL chưa có khu nào, nên có 6 khu vực. |
+| Tìm tên không dấu ("ho" ra "Hổ") | Chưa hỗ trợ (SQLite không bỏ dấu tiếng Việt). |
