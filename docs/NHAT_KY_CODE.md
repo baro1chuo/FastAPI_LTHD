@@ -214,3 +214,55 @@ Mở `/docs` và thử lần lượt `GET /api/users/me`, `PATCH /api/users/me`,
 ### Điểm cần nhóm chốt
 - `GET /api/auth/me` và `GET /api/users/me` trả cùng dữ liệu. Giữ cả hai theo đặc tả chốt.
 - `GET /api/users` vẫn trả mảng, chưa có `total` để phân trang. Thêm nếu frontend cần.
+
+---
+
+## Bước 4 – Systems (thống kê, cài đặt), khu vực, nhóm động vật, health (22/10/2026)
+
+### Việc đã làm
+| File | Thay đổi |
+|---|---|
+| `app/routers/systems.py` (đổi tên từ `admin.py`) | Đường dẫn đổi từ `/api/admin/...` thành **`/api/systems/...`**: `GET /dashboard`, `GET`/`PUT /settings`; mọi API yêu cầu Admin. Hết lỗi import `app.___`. |
+| `app/schemas/systems.py` (đổi tên từ `admin.py`) | `DashboardOut` có số đánh giá theo trạng thái; `SettingsOut`/`SettingsUpdate` dùng đúng tên cột model; kiểm tra giờ mở cửa `07h00-17h00` (mở < đóng), định dạng hotline. |
+| `app/repositories/stats_repository.py` (mới) | `count_all` (COUNT(*)), `count_reviews_by_status` (GROUP BY). |
+| `app/services/stats_service.py`, `settings_service.py` (mới) | UC15 thống kê; UC16 cập nhật cài đặt, `default_lang` phải tồn tại và đang bật. |
+| `app/routers/zone.py`, `schemas/zone.py`, `services/zone_service.py`, `repositories/zone_repository.py` | Chỉ còn `GET /api/zones` (đã bỏ thêm/sửa/xóa khu vực). |
+| `app/routers/categories.py`, `schemas/category.py`, `services/category_service.py` (mới), `repositories/lookup_repository.py` | `GET /api/categories`. |
+| `app/routers/health.py` | Sửa `/api/heath` thành `/api/health`. |
+| `app/main.py` | Gắn đủ 8 router: health, auth, users, animals, reviews, zones, categories, systems. |
+
+### Giải thích
+- **GROUP BY:** đếm đánh giá theo trạng thái bằng 1 câu SQL (`SELECT status, COUNT(*) ... GROUP BY status`) thay vì 3 câu.
+- **Cài đặt chỉ có 1 dòng:** bảng `system_settings` có CHECK `id = 1`. "Sửa cài đặt" là đổi dòng đó, không thêm dòng mới.
+- **Bật tự duyệt không đổi đánh giá cũ (UC16):** `review_service` đọc cài đặt tại lúc gửi đánh giá, nên chỉ đánh giá gửi sau mới được duyệt ngay. Đánh giá đang chờ giữ nguyên.
+- **Kiểm tra ở đâu:** định dạng giờ / hotline kiểm ở schema (sai trả 422); "ngôn ngữ có tồn tại không" phải tra CSDL nên kiểm ở service (sai trả 400).
+
+Ví dụ:
+```http
+GET /api/systems/dashboard          (token admin)
+```
+```json
+{"total_animals": 18, "total_zones": 6, "total_users": 5, "total_reviews": 12,
+ "reviews_by_status": {"pending": 3, "approved": 8, "hidden": 1}}
+```
+```http
+PUT /api/systems/settings           (token admin)
+{"hotline": "1900 1234", "auto_approve": true}
+```
+```json
+{"zoo_name": "ZooGuide", "open_hours": "07h00-17h00", "hotline": "1900 1234", "auto_approve": true, "default_lang": "vi"}
+```
+`GET /api/categories?lang=en` → `[{"id": 1, "code": "mammal", "name": "Mammals"}, ...]`
+
+### Lệnh kiểm tra
+Mở `/docs`, đăng nhập `admin@zooguide.vn`, bấm Authorize, rồi gọi `GET /api/systems/dashboard`, `PUT /api/systems/settings`.
+
+Đã kiểm tra:
+- Không token trả 401; user thường trả 403.
+- Giờ `17h00-07h00`, `7h-17h`, `25h00-26h00`, hotline `abc`, `zoo_name` rỗng/null đều trả 422; `default_lang: "fr"` trả 400.
+- Bật tự duyệt: đánh giá mới thành `approved`, 3 đánh giá `pending` cũ giữ nguyên.
+- `/api/zones` trả 6 khu (thiếu bản dịch `en` thì dùng `vi`); `/api/categories` đổi ngôn ngữ đúng; `/api/health` trả `{"status": "ok"}`.
+
+### Điểm cần nhóm chốt
+- UC15 còn "động vật nhiều đánh giá nhất" và "lọc theo khoảng thời gian" **chưa làm**, vì đặc tả chốt chỉ yêu cầu 4 số liệu.
+- "Khu mẫu" trong `seed.py` vẫn còn, nên có 6 khu vực. Bỏ dòng này nếu không cần.

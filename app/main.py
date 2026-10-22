@@ -1,3 +1,4 @@
+"""Điểm vào của backend ZooGuide: tạo app FastAPI, bật CORS, đổi lỗi nghiệp vụ thành HTTP, gắn các router."""
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -6,12 +7,12 @@ from fastapi.responses import JSONResponse
 
 from app.core.database import init_db
 from app.core.exceptions import AppError
-from app.routers import animals, auth, health, review, user
+from app.routers import animals, auth, categories, health, review, systems, user, zone
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Chạy một lần khi khởi động: tạo bảng và dữ liệu mặc định."""
+    """Chạy một lần khi khởi động: thêm dữ liệu mặc định còn thiếu (bảng do Alembic tạo trước)."""
     init_db()
     yield
 
@@ -30,10 +31,9 @@ app.add_middleware(
 
 @app.exception_handler(AppError)
 async def app_error_handler(request: Request, exc: AppError):
-    """Đổi exception nghiệp vụ từ service thành HTTP response {"detail": "..."}."""
+    """Đổi exception nghiệp vụ từ service thành HTTP response {"detail": "..."} với mã lỗi tương ứng."""
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
 
 
-# TODO: thêm zone, admin khi các router này hết import app.___ / not_implemented
-for module in (health, auth, user, animals, review):
+for module in (health, auth, user, animals, review, zone, categories, systems):
     app.include_router(module.router)
