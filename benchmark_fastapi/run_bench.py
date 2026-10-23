@@ -53,6 +53,12 @@ def make_cases(args):
         BenchmarkCase("FastAPI", "Chờ I/O 100 ms", args.fastapi_url + "/io-async", "GET", None, 200),
         BenchmarkCase("Flask", "Chờ I/O 100 ms", args.flask_url + "/io-sync", "GET", None, 200),
         BenchmarkCase("DRF", "Chờ I/O 100 ms", args.drf_url + "/io/", "GET", None, 200),
+        BenchmarkCase("FastAPI", "Async đúng: await asyncio.sleep",
+                      args.fastapi_url + "/io-async", "GET", None, 200),
+        BenchmarkCase("FastAPI", "Async sai: time.sleep trong async def",
+                      args.fastapi_url + "/io-blocking-wrong", "GET", None, 200),
+        BenchmarkCase("FastAPI", "Sync def: time.sleep trong def",
+                      args.fastapi_url + "/io-sync", "GET", None, 200),
     ]
 
 
