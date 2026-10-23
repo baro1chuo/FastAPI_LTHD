@@ -33,9 +33,11 @@ docs/NHAT_KY_CODE.md  nhật ký từng bước code (đưa vào báo cáo)
 pip install -r requirements.txt
 python -m alembic upgrade head          # tạo/cập nhật bảng trong app/database/zoo.db
 python -m app.core.sample_data          # (tùy chọn) nạp dữ liệu mẫu; mật khẩu tài khoản mẫu 12345678
-python -m uvicorn app.main:app --reload # mở http://127.0.0.1:8000/docs
+python -m uvicorn app.main:app --reload --ssl-keyfile certs/key.pem --ssl-certfile certs/cert.pem
+                                        # server chạy HTTPS: mở https://127.0.0.1:8000/docs
 ```
 seed.py tự thêm dữ liệu mặc định (ngôn ngữ, vai trò, mức bảo tồn, nhóm, cài đặt) mỗi lần khởi động. `zoo.db` không lên git.
+Server chạy **HTTPS** bằng chứng chỉ tự ký trong `certs/` (key.pem, cert.pem; không lên git, mỗi máy tự tạo bằng lệnh openssl trong README).
 
 ## Quy ước code
 - Router không chứa logic nghiệp vụ, không query DB trực tiếp; gọi `services/*`. Service gọi `repositories/*`; repository không commit.

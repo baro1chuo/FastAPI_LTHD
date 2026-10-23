@@ -11,12 +11,29 @@ Công nghệ: FastAPI · SQLAlchemy 2.0 (async, aiosqlite) · SQLite · Alembic 
 pip install -r requirements.txt
 python -m alembic upgrade head            # tạo/cập nhật bảng trong app/database/zoo.db
 python -m app.core.sample_data            # (tùy chọn) nạp dữ liệu mẫu
-python -m uvicorn app.main:app --reload   # mở http://127.0.0.1:8000/docs
+python -m uvicorn app.main:app --reload --ssl-keyfile certs/key.pem --ssl-certfile certs/cert.pem
 ```
+Mở **https://127.0.0.1:8000/docs** (server chạy HTTPS, gọi bằng `http://` sẽ không được).
+
+### Chứng chỉ HTTPS (làm 1 lần trên mỗi máy)
+Thư mục `certs/` chứa khóa riêng nên **không** đưa lên git; mỗi người tự tạo bằng OpenSSL (có sẵn trong Git Bash và Codespaces):
+```bash
+mkdir -p certs
+MSYS_NO_PATHCONV=1 openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 365 \
+  -keyout certs/key.pem -out certs/cert.pem \
+  -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+```
+(`MSYS_NO_PATHCONV=1` chỉ cần trên Git Bash Windows; Linux/Codespaces bỏ đi cũng được.)
+
+Đây là chứng chỉ **tự ký** (self-signed) để chạy trên máy, nên:
+- Trình duyệt báo "Kết nối không riêng tư": bấm **Nâng cao → Tiếp tục truy cập 127.0.0.1** (1 lần).
+- Postman: **Settings → General → tắt "SSL certificate verification"**, hoặc thêm `certs/cert.pem` ở **Settings → Certificates → CA Certificates**.
+- curl: thêm `-k`, hoặc `--cacert certs/cert.pem`.
+- Khi triển khai thật: dùng chứng chỉ do CA cấp (vd Let's Encrypt qua Nginx/Caddy); Codespaces đã có sẵn HTTPS ở link `https://...app.github.dev`.
 
 - Sau mỗi lần `git pull`: chạy lại `pip install -r requirements.txt` rồi `python -m alembic upgrade head`.
 - Dữ liệu mặc định (ngôn ngữ, vai trò, mức bảo tồn, nhóm động vật, cài đặt) do `app/core/seed.py` **tự thêm** mỗi lần khởi động.
-- File CSDL `app/database/zoo.db` **không** đưa lên git; mỗi người tự tạo bằng 2 lệnh trên.
+- File CSDL `app/database/zoo.db` và thư mục `certs/` **không** đưa lên git; mỗi người tự tạo.
 - Trên Windows nếu gõ `alembic` / `uvicorn` báo không tìm thấy lệnh thì dùng `python -m alembic`, `python -m uvicorn`.
 
 ### Tài khoản mẫu (sau khi chạy `sample_data`)
