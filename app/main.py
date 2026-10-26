@@ -1,9 +1,27 @@
-from fastapi import FastAPI
+"""Điểm vào của backend ZooGuide: tạo app FastAPI, bật CORS, đổi lỗi nghiệp vụ thành HTTP, gắn các router."""
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
-from app.routers import admin, animals, auth, health, review, user, zone
+from app.core import config
+from app.core.database import engine, init_db
+from app.core.exceptions import AppError
+from app.routers import animals, auth, categories, health, review, systems, user, zone
 
-app = FastAPI(title="Zoo API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Chạy một lần khi khởi động: thêm dữ liệu mặc định còn thiếu (bảng do Alembic tạo trước).
+    Khi tắt app: đóng hết kết nối CSDL."""
+    await init_db()  # await: chờ seed dữ liệu mặc định xuống SQLite
+    yield
+    await engine.dispose()  # await: chờ đóng các kết nối trong pool
+
+
+app = FastAPI(title="Zoo API", version="0.1.0", lifespan=lifespan)
 
 # TODO: đưa danh sách origin vào core/config.py (đọc từ .env)
 app.add_middleware(
@@ -14,5 +32,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for module in (health, auth, user, animals, zone, review, admin):
+
+@app.exception_handler(AppError)
+async def app_error_handler(request: Request, exc: AppError):
+    """Đổi exception nghiệp vụ từ service thành HTTP response {"detail": "..."} với mã lỗi tương ứng."""
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
+
+
+for module in (health, auth, user, animals, review, zone, categories, systems):
     app.include_router(module.router)
+
+# Phục vụ ảnh đã tải lên: file app/static/uploads/animals/x.jpg -> URL /static/uploads/animals/x.jpg
+config.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)  # StaticFiles báo lỗi nếu thư mục chưa có
+app.mount("/static", StaticFiles(directory=config.STATIC_DIR), name="static")

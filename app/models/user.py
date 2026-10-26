@@ -1,21 +1,10 @@
 from datetime import datetime
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
-
-
-class Role(Base):
-    __tablename__ = "role"
-    __table_args__ = (
-        CheckConstraint("code IN ('admin', 'staff', 'user')", name="ck_role_code"),
-        {"sqlite_autoincrement": True},
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    code: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
-    name: Mapped[str] = mapped_column(String(50), nullable=False)
+from app.models.role import Role
 
 
 class User(Base):
@@ -39,3 +28,6 @@ class User(Base):
         "createdAt", DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP")
     )
     avatar: Mapped[str | None] = mapped_column(Text)
+
+    # Nạp kèm vai trò (JOIN) để đọc user.role.code khi tạo JWT / phân quyền
+    role: Mapped[Role] = relationship(lazy="joined")
